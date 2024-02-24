@@ -4,19 +4,27 @@ void init_struct(t_arg_data *arg_data)
 {
     arg_data->maxThreads = 10;
     arg_data->folder = NULL;
+    arg_data->debug = false;
 }
 
 void print_help()
 {
-    printf("Usage: ./Famine </path/to/folder>\n\t\"-h\", \"--help\": Print usage\n\t\"-t\", \"--threads\": Number of threads (max 20)\n");
+    printf("Usage: ./Famine </path/to/folder>\n");
+    printf("\t\"-h\", \"--help\": Print usage\n");
+    printf("\t\"-t\", \"--threads\": Number of threads (max 20)\n");
+    printf("\t\"-d\", \"--debug\": Print debug / error\n");
     exit(0);
 }
 
 void print_struct(t_arg_data *arg_data)
 {
+    if (!arg_data->debug)
+        return;
     printf("Print struct\n");
     printf("\tFolder = \"%s\"\n",arg_data->folder);
     printf("\tMaxThreads = %d\n",arg_data->maxThreads);
+    printf("\tDebug = %s\n", arg_data->debug ? "true" : "false");
+    printf("\n");
 }
 
 
@@ -35,6 +43,8 @@ void check_args(char **argv, t_arg_data *arg_data)
             arg_data->maxThreads = threads;
             i ++;
         }
+        else if ((!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")))
+            arg_data->debug = true;
         else
         {
             if (!arg_data->folder)
@@ -54,4 +64,5 @@ int main(int argc, char **argv)
     init_struct(&arg_data);
     check_args(argv, &arg_data);
     print_struct(&arg_data);
+    read_dir(&arg_data);
 }
