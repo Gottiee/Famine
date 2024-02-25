@@ -64,5 +64,5 @@ int main(int argc, char **argv)
     init_struct(&arg_data);
     check_args(argv, &arg_data);
     print_struct(&arg_data);
-    read_dir(&arg_data);
+    read_dir(&arg_data, arg_data.folder);
 }

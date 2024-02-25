@@ -21,6 +21,6 @@ typedef struct s_arg_data
 } t_arg_data;
 
 /* read_dir.c */
-void read_dir(t_arg_data *data);
+void read_dir(t_arg_data *data, char *path);
 
 #endif
