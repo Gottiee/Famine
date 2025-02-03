@@ -17,7 +17,9 @@ SAN			= -fsanitize=address
 # SOURCES
 
 SRC_FILES = famine	\
-read_dir
+read_dir \
+infect \
+parse_file
 
 C_FILES		=	$(addsuffix .c, $(SRC_FILES))
 SRCS		=	$(addprefix $(SRC_DIR), $(C_FILES))
