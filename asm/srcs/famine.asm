@@ -12,12 +12,13 @@ _start:
     ; placing famine on the stack
     mov rbp, rsp
     sub rsp, famine_size
+    mov rdi, dir1                               ; dir to open for arg readDir
     call _readDir
     jmp _exit
 
+; take directory to open in rdi
 _readDir:
-    mov rax, SYS_OPEN
-    mov rdi, dir1
+    mov rax, SYS_OPEN 
     mov rsi, O_RDONLY | O_DIRECTORY
     xor rdx, rdx
     syscall
@@ -25,29 +26,36 @@ _readDir:
     jl _exit
 
     mov rdi, rax
-    mov rax, SYS_GETDENTS
+    mov rax, SYS_GETDENTS                   	; getdents64(int fd, void *buf, size_t size_buf)
     lea rsi, FAM(famine.dirents)
     mov rdx, PAGE_SIZE
     syscall
-    xor r8, r8
-    lea r10, FAM(famine.dirents)            ; r10 -> (struct famine.diretents)
-    mov r12, rax                            ; r12 = getdents total length
-    cmp r12, 0
+    lea r10, FAM(famine.dirents_struct_ptr) 	; r10 -> (struct famine.diretents_struct_ptr)
+    mov [r10], rsi          	                ; famine.dirents_struct_ptr -> famine.dirents
+    lea r11, FAM(famine.total_to_read)      	; r11 -> (struct famine.total_to_read)
+    mov DWORD [r11], eax                        ; famine.total_to_read = getdents total length
+    cmp rax, 0
     jle _return
 
     _listFile:
-        movzx r9, WORD [r10 + D_RECLEN_OFF] ; r9 = length de la stuct dirents actuelle
-        add r8, r9                          ; update du total lu dans r8
-        mov rbx, r10                        ; rbx -> struct dirent
-        add r10, r9                         ; r10 -> sur la prochaine struct dirent
-        cmp BYTE [rbx + D_TYPE], D_REG_FILE ; verifie le type du fichier
+        lea r8, FAM(famine.total_read)      	; r8 -> total lu de getdents
+        lea r9, FAM(famine.total_to_read)       ; r9 -> total a lire de getdents
+        mov r10, FAM(famine.dirents_struct_ptr) ; r10 -> actual dirent struct
+        lea r11, FAM(famine.dirents_struct_ptr) ; r11 -> ptr de la struct actuelle
+        movzx r12, WORD [r10 + D_RECLEN_OFF] 	; r12 = length de la stuct dirents actuelle
+        add [r8], r12d                        	; update du total lu dans r8
+        add [r11], r12                          ; famine.diretns_struct_ptr -> sur la prochaine struct
+        cmp BYTE [r10 + D_TYPE], D_REG_FILE 	; verifie le type du fichier
         jne _checkRead
-        writeWork
+        lea rsi, [r10 + D_NAME]                 ; charge le nom du fichier dans rsi
+        writeWork                               ; a modifier avec ta fonction
 
             _checkRead:
-            cmp r8, r12                     ; if (total lu >= total getdents)
-            jge _return
-            jmp _listFile
+                mov r8, FAM(famine.total_read)
+                mov r12, FAM(famine.total_to_read)
+                cmp r8d, r12d                 	; if (total lu >= total getdents)
+                jge _return
+                jmp _listFile
 
 _return:
     ret
