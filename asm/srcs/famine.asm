@@ -50,7 +50,7 @@ _readDir:
     sub r11, 1
     add rsi, r11                    ; rsi -> le prochain (pour recup le d_type)
     movzx r13, byte [rsi]
-    cmp r13, D_REG           ; est ce que le fichier, est un fichier reg
+    cmp r13, D_REG                  ; est ce que le fichier, est un fichier reg
     jne _checkRead
     writeWork
     jmp _checkRead

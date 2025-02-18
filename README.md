@@ -38,13 +38,20 @@ readelf -l
 
 ## Fonctionnement:
 
-- bouclé de maniere recursive sur les directories pour trouver les fichiers
+- checker tous les fichiers dans les repertoir /tpm/test et /tmp/test2
 - pour chaque fichier:
+    - checker si c'est un fichier
+
     - analyser si c'est un fichier qu'on peut infecter (elf 64)
+        - open
+        - mmap
+        - checker Ehdr
+    - verifier si l'executable est deja infecté (jsp comment faire)
+        - ?
+
     - chercher un gap, dans le fichier (meme tech qu'avec woody)
-    - verifier si l'executable est deja infecté
     - verifier si le gap est assez gros (normalement ca devrait passer pour la pluspart des fichier (si c'et trop gros, il faudra soit optimiser, soit mettre en place un packer (compresser notre code pour qu'il rentre dasn la cave)))
-    - patch l'entrypoint du binaire
+    - patch l'entrypoint du binaire + les segments
     - injecter le code
 
 ## Amelioration possible:
