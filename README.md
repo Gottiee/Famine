@@ -61,7 +61,6 @@ readelf -l
 - faire executer une backdoor
 - le faire devenir recursif
 - multi processus / threads (mdr les threads en asm)
-- infecter des images
 
 ### Docu
 

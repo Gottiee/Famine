@@ -15,8 +15,8 @@
 %define		D_INO_OFF			0x00
 %define		D_OFF_OFF			0x08
 %define		D_RECLEN_OFF		0x10
-%define		D_NAME_OFF			0x12
-%define     D_REG               0x8
+%define		D_TYPE  			0x12
+%define     D_REG_FILE          0x8
 
 %define     PAGE_SIZE           0x1000
 
@@ -24,7 +24,6 @@
 
 struc famine
     .dirents:       resb        PAGE_SIZE
-    .d_reclen:      resw        1
 endstruc
 
 %macro writeWork 0
