@@ -65,3 +65,14 @@ readelf -l
 ### Docu
 
 - [Gitgub de ref](https://github.com/Croco-byte/famine)
+
+
+
+## PRB
+
+- dir
+
+pwd ? 
+
+
+../test  -> ../test/dir -> ../test/dir/fraise
