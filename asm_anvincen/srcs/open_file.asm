@@ -9,12 +9,13 @@ _start:
 	
     ; placing famine on the stack
     mov rbp, rsp
-    sub rsp, check_file_size
-	call	_check_file
+	call _check_file
     jmp _exit
 
 _check_file:
+	push rbp
 	mov	rbp, rsp
+    sub rsp, check_file_size
 
 	_open_file:
 		mov	rax, SYS_OPEN
@@ -53,15 +54,14 @@ _check_file:
 
 	_check_elf_format:
 		inc rax
-		cmp	qword [rax], 0x454c4602	; if != 'E'
+		cmp	dword [rax], 0x02464c45	; if != 'E'
 		jne _exit_wrong_format
 
 
 	_close_file:
 		mov	rax, qword 0x3
-		lea	rdi, [rel file_name]
-		mov rsi, O_RDONLY
-		xor rdx, rdx 
+		mov	rdi, CHF(check_file.file_fd)
+		syscall
 		jmp _return
 
 	_exit_wrong_format:
