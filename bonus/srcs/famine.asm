@@ -20,17 +20,28 @@ _initDir:
     push rbp
     mov rbp, rsp
     sub rsp, famine_size
-
+    lea r9, FAM(famine.total_read)                          ; init total_read
+    mov DWORD[r9], 0
     lea rsi, FAM(famine.pwd)
-    call _strcpy                                        ; strcpy(famine.pwd(rsi), pwd(rdi))
+    call _strcpy                                            ; strcpy(famine.pwd(rsi), pwd(rdi))
     cmp rdx, 0
     je _readDir
-    call _strlen                                             ; strlen(famine.pwd(rsi))
+    call _strlen                                            ; strlen(famine.pwd(rsi))
     add rsi, rax
+    cmp BYTE [rsi - 1], '/'
+    je _join
     mov BYTE [rsi], '/'
     add rsi, 1
+
+    _join:
     mov rdi, rdx
     call _strcpy
+
+    ; debug
+    mov rsi, rsp
+    writeWork
+    writeBack
+
     mov rdi, rsp
 
 _readDir:
@@ -41,6 +52,8 @@ _readDir:
     cmp rax, 0
     jl _return
 
+    lea rdi, FAM(famine.fd)                             ; en registre le fd dans la struct
+    mov [rdi], rax
     mov rdi, rax
     mov rax, SYS_GETDENTS                   			; getdents64(int fd, void *buf, size_t size_buf)
     lea rsi, FAM(famine.dirents)
@@ -65,18 +78,32 @@ _readDir:
         je _recursif
         cmp BYTE [r10 + D_TYPE], D_REG_FILE 			; verifie le type du fichier
         jne _checkRead
+
+        ; debug
+        mov rsi, rsp
+        writeWork
+        writeSlash
+
         lea rsi, [r10 + D_NAME]                 		; charge le nom du fichier dans rsi
+
         writeWork                               		; a modifier avec ta fonction
+        writeBack
         jmp _checkRead
 
             _recursif:
                 lea rdi, FAM(famine.pwd)
                 lea rdx, [r10 + D_NAME]                 ; rdi -> folder name
-                cmp DWORD [rdx], 0x0002e
+                cmp BYTE [rdx], 0x2e
+                jne _callInit
+                cmp BYTE [rdx + 1], 0
                 je _checkRead
-                cmp DWORD [rdx], 0x002e2e
+                cmp BYTE [rdx + 1], 0x2e
+                jne _callInit
+                cmp BYTE [rdx + 2], 0
                 je _checkRead
-                call _initDir
+
+                _callInit:
+                    call _initDir
 
             _checkRead:
                 mov r8, FAM(famine.total_read)
@@ -86,6 +113,9 @@ _readDir:
                 jmp _listFile
 
 _return:
+    mov rax, SYS_CLOSE
+    mov rdi, FAM(famine.fd)
+    syscall
     leave
     ret
 
@@ -123,5 +153,6 @@ _exit:
     xor rdi, rdi
     syscall
 
-dir1        db  "../test", 0
-open        db  "It worked", 10, 0
+dir1        db  "/", 0
+back        db  10, 0
+slash       db "/", 0

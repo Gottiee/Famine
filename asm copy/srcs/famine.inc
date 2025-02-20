@@ -17,7 +17,6 @@
 %define		D_RECLEN_OFF		0x10
 %define		D_TYPE  			0x12
 %define		D_NAME  			0x13
-%define     D_FOLDER            0x4
 %define     D_REG_FILE          0x8
 
 %define     PAGE_SIZE           0x1000
@@ -25,39 +24,16 @@
 %define		FAM(x)				[(rbp - famine_size) + x]
 
 struc famine
-    .pwd                resb    PAGE_SIZE
     .dirents:           resb    PAGE_SIZE
-    .fd                 resq    1
     .total_read:        resd    1
     .total_to_read:     resd    1
     .dirents_struct_ptr resq    1
 endstruc
 
 %macro writeWork 0
-    call _strlen
-    mov rdx, rax
     mov rax, 1
     mov rdi, 1
+    mov rsi, open
+    mov rdx, 11
     syscall
-%endmacro
-
-
-%macro writeBack 0
-    mov rax, 1
-    mov rdi, 1
-    mov r13, rsi
-    mov rsi, back
-    mov rdx, 1
-    syscall
-    mov rsi, r13
-%endmacro
-
-%macro writeSlash 0
-    mov rax, 1
-    mov rdi, 1
-    mov r13, rsi
-    mov rsi, slash
-    mov rdx, 1
-    syscall
-    mov rsi, r13
 %endmacro
