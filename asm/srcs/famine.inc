@@ -1,3 +1,5 @@
+%define		SIG_LEN			0x2b
+
 ; SYSCALL
 %define     SYS_EXIT        60
 %define     SYS_OPEN        2
@@ -44,6 +46,7 @@ endstruc
 
 struc check_file
 	.file_fd:	resd	1
+	.file_name:	resw	255
 	.map:		resq	1
 endstruc
 
