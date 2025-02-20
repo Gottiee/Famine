@@ -7,6 +7,10 @@ section .text
 global _start
 
 
+; to do
+;   - modifier le getdents
+;   - modifier pour revoyer le path du fichier aussi
+
 _start:
 
     ; placing famine on the stack

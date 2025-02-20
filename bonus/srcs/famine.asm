@@ -6,7 +6,6 @@ default rel
 section .text
 global _start
 
-
 _start:
     mov rbp, rsp
     mov rdi, dir1                                       ; dir to open for arg initDir
@@ -20,8 +19,6 @@ _initDir:
     push rbp
     mov rbp, rsp
     sub rsp, famine_size
-    lea r9, FAM(famine.total_read)                          ; init total_read
-    mov DWORD[r9], 0
     lea rsi, FAM(famine.pwd)
     call _strcpy                                            ; strcpy(famine.pwd(rsi), pwd(rdi))
     cmp rdx, 0
@@ -38,9 +35,9 @@ _initDir:
     call _strcpy
 
     ; debug
-    mov rsi, rsp
-    writeWork
-    writeBack
+    ; mov rsi, rsp
+    ; writeWork
+    ; writeBack
 
     mov rdi, rsp
 
@@ -54,17 +51,24 @@ _readDir:
 
     lea rdi, FAM(famine.fd)                             ; en registre le fd dans la struct
     mov [rdi], rax
-    mov rdi, rax
-    mov rax, SYS_GETDENTS                   			; getdents64(int fd, void *buf, size_t size_buf)
-    lea rsi, FAM(famine.dirents)
-    mov rdx, PAGE_SIZE
-    syscall
+
+    _getDents:
+        lea r10, FAM(famine.fd) 
+        lea r9, FAM(famine.total_read)                      ; init total_read
+        mov DWORD[r9], 0
+        mov rax, SYS_GETDENTS                   			; getdents64(int fd, void *buf, size_t size_buf)
+        mov rdi, [r10]
+        lea rsi, FAM(famine.dirents)
+        mov rdx, PAGE_SIZE
+        syscall
+        cmp rax, 0
+        jle _return
+
     lea r10, FAM(famine.dirents_struct_ptr) 			; r10 -> (struct famine.diretents_struct_ptr)
     mov [r10], rsi          	                		; famine.dirents_struct_ptr -> famine.dirents
     lea r11, FAM(famine.total_to_read)      			; r11 -> (struct famine.total_to_read)
     mov DWORD [r11], eax                        		; famine.total_to_read = getdents total length
-    cmp rax, 0
-    jle _return
+
 
     _listFile:
         lea r8, FAM(famine.total_read)      			; r8 -> total lu de getdents
@@ -109,8 +113,9 @@ _readDir:
                 mov r8, FAM(famine.total_read)
                 mov r12, FAM(famine.total_to_read)
                 cmp r8d, r12d                 			; if (total lu >= total getdents)
-                jge _return
+                jge _getDents
                 jmp _listFile
+    
 
 _return:
     mov rax, SYS_CLOSE
