@@ -46,9 +46,10 @@ struc famine
 endstruc
 
 struc check_file
-	.file_fd:	resd	1
-	.file_name:	resw	255
-	.map:		resq	1
+	.file_fd:		resd	1
+	.file_name:		resw	255
+	.map:			resq	1
+	.base_entry:	resq	1
 endstruc
 
 ; ELF structures

