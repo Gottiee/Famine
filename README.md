@@ -56,23 +56,24 @@ readelf -l
 
 ## Amelioration possible:
 
-- packer le virus
-- faire en sorte pouvoir augmenter la taille du fichier d'une page 0x1000, en shiftant tous dans le fichier de 4096 byte apres notre cave.
-- faire executer une backdoor
-- le faire devenir recursif
-- multi processus / threads (mdr les threads en asm)
+- [ ] packer le virus
+- [ ] faire executer une backdoor
+- [ ] privesc
+- [x] le faire devenir recursif
+- [ ] Exctract des fichiers
 
 ### Docu
 
 - [Gitgub de ref](https://github.com/Croco-byte/famine)
+- [asm references](https://www.felixcloutier.com/x86/)
+- [another asm references](https://faydoc.tripod.com/cpu/jc.htm)
 
 
+### A tester
 
-## PRB
-
-- dir
-
-pwd ? 
-
-
-../test  -> ../test/dir -> ../test/dir/fraise
+- normal
+	- mauvais magic bytes
+	- mauvais droits
+	- pas de cave assez grande
+- bonus
+	- pas de connexion au serveur
