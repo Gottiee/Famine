@@ -24,6 +24,9 @@
 %define		FAM(x)				[(rbp - famine_size) + x]
 
 struc famine
+    .pwdPtr             resq    1
+    .lenghtPwd          resq    1
+    .fd                 resq    1
     .dirents:           resb    PAGE_SIZE
     .total_read:        resd    1
     .total_to_read:     resd    1
@@ -31,9 +34,19 @@ struc famine
 endstruc
 
 %macro writeWork 0
+    call _strlen
+    mov rdx, rax
     mov rax, 1
     mov rdi, 1
-    mov rsi, open
-    mov rdx, 11
     syscall
+%endmacro
+
+%macro writeBack 0
+    mov rax, 1
+    mov rdi, 1
+    mov r13, rsi
+    mov rsi, back
+    mov rdx, 1
+    syscall
+    mov rsi, r13
 %endmacro
