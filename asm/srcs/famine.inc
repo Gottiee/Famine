@@ -1,4 +1,5 @@
 %define		SIG_LEN			0x2b
+%define		CODE_LEN		(_end - _start)
 
 ; SYSCALL
 %define     SYS_EXIT        60
@@ -52,6 +53,8 @@ endstruc
 
 ; ELF structures
 %define	PT_LOAD	0x1
+%define PF_X	0x1
+
 struc	elf64_ehdr
 	.e_ident:		resb	16
 	.e_type:		resw	1

