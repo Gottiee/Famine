@@ -1,6 +1,3 @@
-%define		SIG_LEN			0x2b
-%define		CODE_LEN		(_end - _start)
-
 ; SYSCALL
 %define     SYS_EXIT        60
 %define     SYS_OPEN        2
@@ -8,12 +5,6 @@
 %define     SYS_CLOSE       3
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
-
-; MMAP
-%define		PROT_EXEC		1
-%define		PROT_READ		2
-%define		PROT_WRITE		4
-%define		MAP_SHARED		1
 
 ; OPEN
 %define		O_RDONLY			0x0000
@@ -29,27 +20,36 @@
 %define		D_NAME  			0x13
 %define     D_REG_FILE          0x8
 
+; MMAP
+%define		PROT_EXEC		1
+%define		PROT_READ		2
+%define		PROT_WRITE		4
+%define		MAP_SHARED		1
+
 ; LSEEK
 %define		SEEK_SET			0x0
 %define		SEEK_END			0x2
 
+%define		FAM(x)				[(rbp - famine_size) + x]
+%define		INF(x)				[(rbp - infection_size) + x]
+
+
+%define		CODE_LEN		(_end - _start)
 %define     PAGE_SIZE           0x1000
 
-%define		FAM(x)				[(rbp - famine_size) + x]
-%define		CHF(x)				[(rbp - check_file_size) + x]
 
 struc famine
+    .pwdPtr             resq    1
+    .lenghtPwd          resq    1
+    .fd                 resq    1
     .dirents:           resb    PAGE_SIZE
     .total_read:        resd    1
     .total_to_read:     resd    1
     .dirents_struct_ptr resq    1
 endstruc
 
-struc check_file
-	.file_fd:		resd	1
-	.file_name:		resw	255
-	.map:			resq	1
-	.base_entry:	resq	1
+struc infection
+	.file_fd	resq	1
 endstruc
 
 ; ELF structures
@@ -85,9 +85,19 @@ struc	elf64_phdr
 endstruc
 
 %macro writeWork 0
+    call _strlen
+    mov rdx, rax
     mov rax, 1
     mov rdi, 1
-    mov rsi, open
-    mov rdx, 11
     syscall
+%endmacro
+
+%macro writeBack 0
+    mov rax, 1
+    mov rdi, 1
+    mov r13, rsi
+    mov rsi, back
+    mov rdx, 1
+    syscall
+    mov rsi, r13
 %endmacro
