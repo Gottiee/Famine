@@ -35,6 +35,7 @@
 
 
 %define		CODE_LEN		(_end - _start)
+%define		FINJMP_OFF		(_final_jmp - _start)
 %define     PAGE_SIZE           0x1000
 
 
