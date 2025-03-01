@@ -69,6 +69,9 @@ readelf -l
 - [asm references](https://www.felixcloutier.com/x86/)
 - [another asm references](https://faydoc.tripod.com/cpu/jc.htm)
 
+### GDB usefull commands
+```b *(_start + 0x115)```: sets a breakpoint a certain offset
+
 ### A tester
 
 - normal
