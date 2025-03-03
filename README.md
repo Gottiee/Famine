@@ -72,6 +72,14 @@ readelf -l
 ### GDB usefull commands
 ```b *(_start + 0x115)```: sets a breakpoint a certain offset
 
+### Bonus
+
+Privesc + backdoor:
+
+```
+ssh -i /path/to/private/ssh/key root@192.1.1.1
+```
+
 ### A tester
 
 - normal

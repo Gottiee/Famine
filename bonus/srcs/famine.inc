@@ -1,15 +1,17 @@
 ; SYSCALL
-%define     SYS_EXIT        60
+%define     SYS_READ        0
+%define     SYS_WRITE       1
 %define     SYS_OPEN        2
-%define     SYS_GETDENTS    217
 %define     SYS_CLOSE       3
-
+%define     SYS_EXIT        60
+%define     SYS_GETDENTS    217
 
 ; OPEN
 %define		O_RDONLY			0x0000
 %define		O_WRONLY			0x0001
 %define		O_RDWR				0x0002
 %define		O_DIRECTORY			0q0200000
+%define     O_CREAT             0x0040
 
 ; DIRENT
 %define		D_INO_OFF			0x00
