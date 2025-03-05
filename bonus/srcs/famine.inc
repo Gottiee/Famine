@@ -3,8 +3,17 @@
 %define     SYS_WRITE       1
 %define     SYS_OPEN        2
 %define     SYS_CLOSE       3
+%define		SYS_LSEEK		8
+%define		SYS_MMAP		9
 %define     SYS_EXIT        60
 %define     SYS_GETDENTS    217
+%define     SYS_SOCKET      41
+%define     SYS_CONNECT     42
+%define     SYS_SENDTO      44
+
+; SOCKET
+%define     AF_INET         2
+%define     SOCK_STREAM     1
 
 ; OPEN
 %define		O_RDONLY			0x0000
@@ -22,9 +31,27 @@
 %define     D_FOLDER            0x4
 %define     D_REG_FILE          0x8
 
+; MMAP
+%define		PROT_EXEC		1
+%define		PROT_READ		2
+%define		PROT_WRITE		4
+%define		MAP_SHARED		1
+%define		MAP_PRIVATE		2
+%define		MAP_ANONYMOUS   0x20
+
+; LSEEK
+%define		SEEK_SET			0x0
+%define		SEEK_END			0x2
+
 %define     PAGE_SIZE           0x1000
 
 %define		FAM(x)				[(rbp - famine_size) + x]
+%define		SOCK(x)				[(rbp - sock_size) + x]
+%define		INF(x)				[(rbp - infection_size) + x]
+
+struc sock
+    .sockfd             resq    1
+endstruc
 
 struc famine
     .pwd                resb    PAGE_SIZE
@@ -33,6 +60,10 @@ struc famine
     .total_read:        resd    1
     .total_to_read:     resd    1
     .dirents_struct_ptr resq    1
+endstruc
+
+struc infection
+	.file_fd	resq	1
 endstruc
 
 %macro writeWork 0
