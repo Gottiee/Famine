@@ -57,10 +57,10 @@ readelf -l
 ## Amelioration possible:
 
 - [ ] packer le virus
-- [ ] faire executer une backdoor
-- [ ] privesc
+- [x] faire executer une backdoor
+- [x] privesc
 - [x] le faire devenir recursif
-- [ ] Exctract des fichiers
+- [x] Exctract des fichiers
 
 ### Docu
 

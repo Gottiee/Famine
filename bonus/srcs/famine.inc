@@ -49,10 +49,6 @@
 %define		SOCK(x)				[(rbp - sock_size) + x]
 %define		INF(x)				[(rbp - infection_size) + x]
 
-struc sock
-    .sockfd             resq    1
-endstruc
-
 struc famine
     .pwd                resb    PAGE_SIZE
     .dirents:           resb    PAGE_SIZE
