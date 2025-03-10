@@ -373,22 +373,12 @@ _strcpyNoNull:
 		add rcx, 1
 		jmp strcpy_loop
 	strcpy_loop_end:
-		; mov byte [rsi + rcx], 0
 		ret
 
 _strcpy:
-	xor rcx, rcx
-	_strcpy_loop:
-		cmp byte [rdi + rcx], 0
-		je	_strcpy_loop_end
-		mov al, byte [rdi + rcx]
-		mov [rsi + rcx], al
-		add rcx, 1
-		jmp _strcpy_loop
-
-	_strcpy_loop_end:
-		mov byte [rsi + rcx], 0
-		ret
+    call _strcpyNoNull
+    mov byte [rsi + rcx], 0
+    ret
 
 ; strncpy(dst:rsi, src: rdi, count: rcx)
 _strncpy:
@@ -474,7 +464,7 @@ _exit:
     syscall
 
 dir1        db  "../test", 0
-dir2        db  "../test2", 0
+dir2        db  "/home/gottie/prog/Famine/test2", 0
 back        db  10, 0
 slash       db "/", 0
 tiret       db 10, "-------", 10, 10, 0
