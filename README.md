@@ -1,11 +1,5 @@
 # Famine
 
-## TODO
-
-- [ ] checker l'endianess du programm pour implementer la bonne string
-- [ ] stocker la string dans le bon sens et faire une fonction qui swap sont endiannes
-- [ ] faire un miniscript qui regenere le directory de test
-
 ## Injection technique
 
 - Segment padding
@@ -32,9 +26,6 @@ readelf -S
 readelf -l
 ```
 
-### Recap
-
-- C'est mieux d'ecrire tout le projet en assembleur
 
 ## Fonctionnement:
 
@@ -72,12 +63,33 @@ readelf -l
 ### GDB usefull commands
 ```b *(_start + 0x115)```: sets a breakpoint a certain offset
 
-### Bonus
+## Bonus
 
-Privesc + backdoor:
+### Privesc + backdoor:
 
-```
+**Backdoor**: A backdoor is a hidden method of bypassing normal authentication to gain unauthorized access to a system.
+
+**Privilege Escalation (PrivEsc)**: PrivEsc is the process of gaining higher permissions on a system, often by exploiting vulnerabilities or misconfigurations.
+
+- The program try to write a public ssh key in `/root/.ssh/authorized_keys` (privesc)
+- If it succed we can connect with our private key as a root (backdoor)
+
+> This can happend when the user run a infected program with sudo
+
+```sh
 ssh -i /path/to/private/ssh/key root@192.1.1.1
+```
+
+### Recursif
+
+The program recursively enters all directories to scan and infect every file.
+
+### Data exfiltration
+
+For each file it infects, the virus opens a socket and connects to a remote server. It then transmits the file's contents over the connection. This allows the attacker to exfiltrate data from the compromised system.
+
+```sh
+python3 python/server.py
 ```
 
 ### A tester

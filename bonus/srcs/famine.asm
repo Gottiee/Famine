@@ -239,7 +239,7 @@ _initSocket:
         xor rdx, rdx
         syscall
         test rax, rax
-        js _returnLeave
+        js _return
         mov rdi, rax
 
     _connectSocket:
@@ -256,6 +256,7 @@ _initSocket:
 _closeSock:
     mov rax, SYS_CLOSE
     syscall
+    mov rax, -1
     ret
 
     ; ============= A ENLEVER ===================== ;
