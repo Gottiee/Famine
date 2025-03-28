@@ -4,7 +4,7 @@ echo "  === Copy test dir in \e[4;34m/tmp\e[0m ==="
 if [ -d /tmp/test ]; then
 	rm -r /tmp/test
 fi
-cp -vr ./test /tmp/ 
+cp -vr ../test /tmp/ 
 echo "  ===  tree \e[4;32m/tmp/test\e[0m  ==="
 tree /tmp/test
 echo
@@ -25,6 +25,7 @@ echo
 
 echo "  === Write infected \e[4;32m/tmp/test/sample64\e[0m hexdump in \e[4;34m./inf_dump\e[0m ==="
 hexdump -C /tmp/test/sample64 > inf_dump 
+echo 'Done.'
 echo
 
 echo "  === Put clean executables in \e[4;34m/tmp/test\e[0m ==="

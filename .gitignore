@@ -2,5 +2,5 @@ test
 obj
 Famine
 famine.o
-asm/dump
+**/*dump
 ssh_keys
