@@ -19,7 +19,7 @@ make
 echo
 
 echo "  === Run ./Famine ==="
-valgrind --leak-check=full --show-leak-kinds=all -q ./Famine 
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes -q ./Famine 
 echo "Done."
 echo
 

