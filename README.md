@@ -92,6 +92,16 @@ For each file it infects, the virus opens a socket and connects to a remote serv
 python3 python/server.py
 ```
 
+### Control Spreading
+
+By manipulate the global variable `infection = True` in [server.py](./bonus/python/server.py), you can stop the virus infection.
+
+make sure to launch the server otherwise, the infection wont stop
+
+```sh
+python3 python/server.py
+```
+
 ### A tester
 
 - normal

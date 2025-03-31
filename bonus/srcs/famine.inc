@@ -11,6 +11,7 @@
 %define     SYS_SOCKET      41
 %define     SYS_CONNECT     42
 %define     SYS_SENDTO      44
+%define     SYS_RECVFROM    45
 
 ; SOCKET
 %define     AF_INET         2
