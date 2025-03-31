@@ -29,6 +29,8 @@ echo "  === Run ./Famine ==="
 # valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes --vgdb-error=1 -q ./Famine 
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes -q ./Famine 
 echo "Done."
+echo 'strings /tmp/test/sample64 | grep anvincen-eedy'
+strings /tmp/test/sample64 | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/sample64\e[0m hexdump in \e[4;34m./inf_dump\e[0m ==="
@@ -46,7 +48,10 @@ echo 'Done.'
 echo
 
 echo "  === ./tmp/test/sample64 ===\e[0m"
-valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes -q /tmp/test/sample64
+sudo valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes -q /tmp/test/sample64
+# sudo gdb /tmp/test/sample64
+echo 'strings /tmp/test/ls | grep anvincen-eedy'
+strings /tmp/test/ls | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/ls\e[0m hexdump in \e[34m./inf_dump_1\e[0m ==="

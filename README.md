@@ -100,3 +100,7 @@ python3 python/server.py
 	- pas de cave assez grande
 - bonus
 	- pas de connexion au serveur
+
+
+### TODO
+	- Unmap bonus eliot
