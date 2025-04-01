@@ -21,6 +21,8 @@ echo
 echo "  === Run ./Famine ==="
 valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --track-fds=yes -q ./Famine 
 echo "Done."
+echo 'strings /tmp/test/sample64 | grep anvincen-eedy'
+strings /tmp/test/sample64 | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/sample64\e[0m hexdump in \e[4;34m./inf_dump\e[0m ==="
@@ -29,7 +31,7 @@ echo 'Done.'
 echo
 
 echo "  === Put clean executables in \e[4;34m/tmp/test\e[0m ==="
-cp -v ./test/OK/ls ./test/OK/pwd /tmp/test/
+cp -v ../test/OK/ls ../test/OK/pwd /tmp/test/
 echo
 
 echo "  === Write clean \e[4;32m/tmp/test/ls\e[0m hexdump in \e[4;34m./cl_dump_1\e[0m  ==="
@@ -39,6 +41,9 @@ echo
 
 echo "  === ./tmp/test/sample64 ===\e[0m"
 valgrind --leak-check=full --show-leak-kinds=all -q /tmp/test/sample64
+# gdb /tmp/test/sample64
+echo 'strings /tmp/test/sample64 | grep anvincen-eedy'
+strings /tmp/test/sample64 | grep anvincen-eedy
 echo
 
 echo "  === Write infected \e[4;32m/tmp/test/ls\e[0m hexdump in \e[34m./inf_dump_1\e[0m ==="
