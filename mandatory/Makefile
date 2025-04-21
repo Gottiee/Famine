@@ -26,7 +26,7 @@ correction:	$(NAME)
 	@sh ./verbose.sh
 
 %.o:%.asm
-	$(NASM) -f elf64 -i srcs/ $< -o $@
+	$(NASM) -g -f elf64 -i srcs/ $< -o $@
 
 # strife:
 # 			nasm -f elf64 -i srcs/strife/ srcs/strife/strife.asm -o srcs/strife/strife.o && ld srcs/strife/strife.o -o Strife
