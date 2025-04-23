@@ -60,19 +60,27 @@ struc infection
 	.seg_hdr_addr		resq	1
 	.last_seg_hdr_addr	resq	1
 	.injection_offset	resq	1
+	.injection_addr		resq	1
 	.sec_hdr_addr		resq	1	
 	.original_entry 	resq	1
 	.original_end		resq	1
 	.add_page			resb	1
+	.mem_eof			resq	1
 	.shstrtab_addr		resq	1
 	.got_str_index		resq	1
 endstruc
 
 ; ELF structures
 %define	PT_LOAD		0x1
+%define	PT_NOTE		0x4
 %define PF_X		0x1
+%define PF_R		0x4
+%define SHT_PROGBITS 0x1
 %define SHT_STRTAB	0x3
+%define SHT_NOTE	0x7
 %define SHT_RELA	0x4
+%define SHF_ALLOC	0x2
+%define SHF_EXECINSTR 0x4
 
 struc	elf64_ehdr
 	.e_ident:		resb	16
