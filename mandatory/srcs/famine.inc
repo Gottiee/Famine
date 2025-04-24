@@ -1,12 +1,12 @@
 ; SYSCALL
-%define     SYS_EXIT        60
 %define     SYS_OPEN        2
-%define     SYS_GETDENTS    217
 %define     SYS_CLOSE       3
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
 %define		SYS_UNMAP		11
+%define     SYS_EXIT        60
 %define		SYS_FTRUNCATE	77
+%define     SYS_GETDENTS    217
 
 ; OPEN
 %define		O_RDONLY			0x0000
@@ -128,24 +128,6 @@ struc elf64_rela
 	.r_info			resq	1
 	.r_addend		resq	1
 endstruc
-
-; %macro writeWork 0
-;     call _strlen
-;     mov rdx, rax
-;     mov rax, 1
-;     mov rdi, 1
-;     syscall
-; %endmacro
-
-; %macro writeBack 0
-;     mov rax, 1
-;     mov rdi, 1
-;     mov r13, rsi
-;     mov rsi, back
-;     mov rdx, 1
-;     syscall
-;     mov rsi, r13
-; %endmacro
 
 %macro PUSHA 0
 	push rax

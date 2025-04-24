@@ -2,16 +2,11 @@
 
 ## Injection technique
 
-- Segment padding
-- Elf shifting
-    - https://github.com/jdecorte-be/42-WoodyWoodpacker
-- PT_NOTE segment - .note.* section
+- Cave injection
+- [PT_NOTE to PT_LOAD injection](https://www.symbolcrash.com/2019/03/27/pt_note-to-pt_load-injection-in-elf/)
 
-https://www.root-me.org/fr/Documentation/Applicatif/ELF-Injection?q=%2Fen%2FDocumentation%2FApplicatif%2FELF-Injection
+[How to make ELF mdr](https://medium.com/@dassomnath/handcrafting-x64-elf-from-specification-to-bytes-9986b342eb89)
 
-https://0x00sec.org/t/elfun-file-injector/410
-
-https://medium.com/@dassomnath/handcrafting-x64-elf-from-specification-to-bytes-9986b342eb89 (il est fou afflelou)
 
 ## Cmd utiles
 
@@ -24,34 +19,43 @@ readelf -h
 readelf -S
 # read segment
 readelf -l
+# print raw opcode to check offsets errors
+hexdump -C
 ```
 
+### GDB usefull commands
+```b *(_start + 0x115)```: sets a breakpoint a certain offset
 
-## Fonctionnement:
+## Method:
+- Run trough all files in repertory
+- For each one of them:
+	- Check if it is a file
+	- Check if it is an elf64 format by reading the potential elf64_ehdr :
+		- Read the first bytes of it that specifies the format
+	- Browse all segment:
+		- Find a type PT_LOAD segment
+		- Check the presence of a signature
+		- Comparing the size of the gap between the segment and the following to our code:
+			- gap bigger: we will infect that segment. We save the data refering to this segment
+			- gap smaller: we turn a variable to one telling us more space will be needed
+	- A big enough space was found:
+		- save the old p_filesz: it becomes our injection offset (where we will write in the file)
+		- update the header of this segment (filesz, memsz)
+	- No sufficient space was found: (We will use the PT_NOTE to PT_LOAD method to create space)
+		- Find a PT_NOTE segment
+		- Update its header:
+			- p_type: PT_NOTE -> PT_NOTE
+			- p_flags -> PF_X | PF_R
+			- p_offset -> end of file
+			- p_vaddr -> end of program in memory:
+				- We save it to update the e_hdr
+			- p_size -> CODE_LEN
+			- p_align -> PAGE_SIZE
+	- Update the e_hdr:
+		- update e_hdr.e_entry (note that it is an address offset and not a file offset (see readelf output))
+	- Copy the virus
+	- Update the final jump: jump back to the original code
 
-- checker tous les fichiers dans les repertoir /tpm/test et /tmp/test2
-- pour chaque fichier:
-    - checker si c'est un fichier
-
-    - analyser si c'est un fichier qu'on peut infecter (elf 64)
-        - open
-        - mmap
-        - checker Ehdr
-    - verifier si l'executable est deja infecté (jsp comment faire)
-        - ?
-
-    - chercher un gap, dans le fichier (meme tech qu'avec woody)
-    - verifier si le gap est assez gros (normalement ca devrait passer pour la pluspart des fichier (si c'et trop gros, il faudra soit optimiser, soit mettre en place un packer (compresser notre code pour qu'il rentre dasn la cave)))
-    - patch l'entrypoint du binaire + les segments
-    - injecter le code
-
-## Amelioration possible:
-
-- [ ] packer le virus
-- [x] faire executer une backdoor
-- [x] privesc
-- [x] le faire devenir recursif
-- [x] Exctract des fichiers
 
 ### Docu
 
@@ -59,9 +63,6 @@ readelf -l
 - [Autre reference](https://github.com/0x050f/famine)
 - [asm references](https://www.felixcloutier.com/x86/)
 - [another asm references](https://faydoc.tripod.com/cpu/jc.htm)
-
-### GDB usefull commands
-```b *(_start + 0x115)```: sets a breakpoint a certain offset
 
 ## Bonus
 
@@ -101,16 +102,3 @@ make sure to launch the server otherwise, the infection wont stop
 ```sh
 python3 python/server.py
 ```
-
-### A tester
-
-- normal
-	- mauvais magic bytes
-	- mauvais droits
-	- pas de cave assez grande
-- bonus
-	- pas de connexion au serveur
-
-
-### TODO
-	- Unmap bonus eliot

